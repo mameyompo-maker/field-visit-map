@@ -1,0 +1,26 @@
+rules_version = '2';
+
+/*
+ * field_visit_map の Storage ルール。
+ *
+ * 許可リストは二重管理しない — Firestoreの allowedUsers を cross-service function
+ * (firestore.exists) で直接参照する。読み書きとも、圧縮後の写真(最大5MB、JPEG)のみ許可。
+ */
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAllowed() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && firestore.exists(/databases/(default)/documents/allowedUsers/$(request.auth.token.email.lower()));
+    }
+
+    match /photos/{pinId}/{visitId}/{fileName} {
+      allow read: if isAllowed();
+      allow write: if isAllowed()
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if false;
+    }
+  }
+}

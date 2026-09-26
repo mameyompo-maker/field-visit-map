@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>現場・圃場 巡回記録マップ</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#2563eb">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<!-- ログイン画面 -->
+<section id="screenLogin" class="screen" hidden>
+  <div class="login-box">
+    <h1>現場・圃場 巡回記録マップ</h1>
+    <p>チームで共有する巡回記録アプリです。Googleアカウントでログインしてください。</p>
+    <button id="btnSignIn" class="btn-primary">Googleでログイン</button>
+  </div>
+</section>
+
+<!-- 未許可画面 -->
+<section id="screenNotAllowed" class="screen" hidden>
+  <div class="login-box">
+    <h1>アクセス権がありません</h1>
+    <p>このメールアドレスはまだ登録されていません。管理者に下のアドレスを伝えてください。</p>
+    <div class="email-badge">
+      <code id="notAllowedEmail"></code>
+      <button id="btnCopyEmail" type="button">コピー</button>
+    </div>
+    <button id="btnSignOutFromNotAllowed" class="btn-secondary">別のアカウントでログイン</button>
+  </div>
+</section>
+
+<!-- 読み込み中 -->
+<section id="screenLoading" class="screen">
+  <p>読み込み中…</p>
+</section>
+
+<!-- メイン画面 -->
+<section id="screenMap" class="screen" hidden>
+  <header id="topBar">
+    <div id="userBadge">
+      <img id="userPhoto" alt="">
+      <span id="userName"></span>
+    </div>
+    <button id="btnSignOut" class="btn-link">ログアウト</button>
+  </header>
+
+  <div id="syncBar" hidden></div>
+
+  <div id="map"></div>
+
+  <div id="mapControls">
+    <button id="btnLocate" class="fab" title="現在地へ">📍</button>
+    <button id="btnAddPin" class="fab fab-primary" title="ピンを追加">＋</button>
+  </div>
+
+  <button id="btnSyncNow" class="btn-sync-now" hidden>今すぐ同期</button>
+</section>
+
+<!-- ピン詳細パネル -->
+<aside id="pinPanel" class="panel" hidden>
+  <button id="btnClosePinPanel" class="btn-close">×</button>
+  <div id="pinPanelBody"></div>
+</aside>
+
+<!-- ピン追加/編集フォーム -->
+<dialog id="dlgPinForm">
+  <form id="formPin" method="dialog">
+    <h2 id="pinFormTitle">ピンを追加</h2>
+    <label>名前<input id="inpPinName" type="text" required maxlength="120"></label>
+    <label>説明<textarea id="inpPinDescription" rows="3" maxlength="1000"></textarea></label>
+    <label>カテゴリ(任意)<input id="inpPinCategory" type="text" maxlength="60"></label>
+    <p class="hint">位置: <span id="pinFormLatLng"></span></p>
+    <div class="dlg-actions">
+      <button type="button" id="btnCancelPinForm" class="btn-secondary">キャンセル</button>
+      <button type="submit" id="btnSavePinForm" class="btn-primary">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 訪問記録フォーム -->
+<dialog id="dlgVisitForm">
+  <form id="formVisit" method="dialog">
+    <h2>訪問を記録</h2>
+    <p class="hint" id="visitFormWho"></p>
+    <label>メモ<textarea id="inpVisitNote" rows="4" maxlength="2000"></textarea></label>
+    <label>写真<input id="inpVisitPhotos" type="file" accept="image/*" capture="environment" multiple></label>
+    <div id="visitPhotoPreview"></div>
+    <div class="dlg-actions">
+      <button type="button" id="btnCancelVisitForm" class="btn-secondary">キャンセル</button>
+      <button type="submit" id="btnSaveVisitForm" class="btn-primary">記録する</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 写真ライトボックス -->
+<dialog id="dlgLightbox">
+  <button id="btnCloseLightbox" class="btn-close">×</button>
+  <img id="lightboxImg" alt="">
+</dialog>
+
+<div id="toast" hidden></div>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+  }
+</script>
+<script src="./config.js" onerror="console.error('docs/config.js が見つかりません。config.example.js をコピーして作成してください。')"></script>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

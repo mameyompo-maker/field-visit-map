@@ -1,0 +1,9 @@
+{
+  "name": "現場・圃場 巡回記録マップ",
+  "short_name": "巡回記録マップ",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#2563eb",
+  "icons": []
+}
