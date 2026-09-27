@@ -9,8 +9,7 @@ window.FIELD_VISIT_MAP_CONFIG = {
     appId: '1:829426716512:web:c8f44371bef9bb54e85805'
   },
   mapsApiKey: 'AIzaSyDFBo75cjAY_9NfX5rOTmhPbx-0W9SqhwY',
-  // Advanced Markers用のMap ID。Kazさんがconsoleで発行後にここへ設定する(SETUP.md手順3参照)。
-  mapId: 'YOUR_MAP_ID',
+  mapId: '7f2b9e1cba88fab81f5ade56',
   defaultCenter: { lat: -14.9, lng: 38.35 },
   defaultZoom: 12
 };
