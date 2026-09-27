@@ -16,7 +16,13 @@ Kazさんから「Googleマップの保存した場所機能では、写真添�
 実装計画の全文はセッション内のPlanファイル(`serialized-snacking-garden.md`、Claude Code
 のplansディレクトリ)にある。要点はこのファイルと `README.md`/`SETUP.md` に転記済み。
 
-## 現在の状態(2026-09-26 デプロイ作業中)
+## 現在の状態(2026-09-27 全体見直し・再デプロイ済み)
+
+デプロイ後の総点検で、起動・保存まわりに致命的な不具合が複数見つかり、すべて修正して
+push済み(コミット `8a9e89a`)。詳細は下の「2026-09-27に直した不具合」を参照。
+**Kazさんの手元でまだ確認が取れていないのは「allowedUsers への登録」だけ**(下記)。
+
+## 現在の状態(2026-09-26 デプロイ作業)
 
 - Firebaseプロジェクト作成済み: `kazdr-field-visit-map`
 - 課金アカウント紐づけ済み(Blaze相当。請求先「Firebaseのお支払い」)
@@ -27,10 +33,10 @@ Kazさんから「Googleマップの保存した場所機能では、写真添�
   - リポジトリ: https://github.com/mameyompo-maker/field-visit-map
   - 公開URL: https://mameyompo-maker.github.io/field-visit-map/
 
-**残りはブラウザでの手動操作が必要な項目のみ(`SETUP.md`の「残っている作業」参照)**:
-Googleログイン有効化、承認済みドメイン追加、Storage開始、Map ID発行、allowedUsers登録。
-このうちStorage開始とMap ID発行の2つは、Kazさんが完了させたらClaude Code側で続き
-(Storage Rulesデプロイ、config.jsへのMap ID反映+push)を行う。
+Kazさんの手動操作が必要だった項目(Googleログイン有効化、承認済みドメイン追加、
+Storage開始、Map ID発行)は2026-09-26に完了。Storage Rulesのデプロイと
+`docs/config.js` へのMap ID反映もこちらで実施済み。
+**残るは `allowedUsers` への登録のみ(2026-09-27時点で未確認)。**
 
 ### CLIから自動化できなかった項目とその理由
 - **Firebase AuthのGoogleプロバイダ有効化**: firebase-tools/gcloudに対応コマンドが無い
@@ -42,6 +48,50 @@ Googleログイン有効化、承認済みドメイン追加、Storage開始、M
 - **Google Maps Map ID(Advanced Markers用)の発行**: Map Management API
   (`mapmanagement.googleapis.com`)には理論上REST APIがあるが、これも生のcurl+アクセス
   トークンが必要で、上記と同じ理由で手動操作にした。
+
+## 2026-09-27に直した不具合(同じ失敗を繰り返さないための記録)
+
+いずれもデプロイ後の通し点検で見つけたもの。**症状が「読み込み中のまま進まない」に
+集約されるため、原因の切り分けを誤りやすい。**
+
+1. **許可リストを読めずに画面が固まる(最優先で直した本命)**
+   `firestore.rules` の `allowedUsers` が `allow read: if isAllowed()` だけだったため、
+   まだ登録されていない人が自分の行を読むと permission-denied になる。`auth.js` は
+   それを握りつぶして「判定保留(null)」を返し、`app.js` は判定保留を「読み込み中」に
+   割り当てていたため、**永久に読み込み中のまま。ログイン画面にも戻れない。**
+   → ルールで「自分の1行だけは誰でも読める」ようにし、auth.js側も
+   `checking / allowed / denied / error` の4状態に確定させて、判定不能を作らないようにした。
+
+2. **オフラインで保存ボタンが戻らない**
+   Firestoreの `setDoc`/`updateDoc` が返すPromiseは**サーバーに届くまで解決しない**。
+   ローカル反映は即座に終わっているのに `await` していたため、圏外では永久に
+   「保存中…」のまま。→ 書き込みは await せず、ローカル採番したIDを即座に返す方式に変更。
+   未送信ぶんはステータスバーの件数で見せる。**この挙動はFirestoreの仕様であり、
+   オフライン前提のアプリでは絶対に await してはいけない。**
+
+3. **ピン詳細パネルの写真が消える**
+   ピンが更新されるたびにパネル全体を `innerHTML` で作り直しており、写真の入れ物も
+   新品になる。写真は別購読から後追いで流し込むため、再送が無い限り二度と埋まらない。
+   → 見出しは `textContent` で部分更新し、写真は `photosByVisit` の控えから埋め直す。
+
+4. **写真の幅・高さが常に0で保存される**
+   `bitmap.close()` の**後**に `bitmap.width` を読んでいた(仕様上closeで0になる)。
+
+5. **オフラインでアプリが起動すらできない**
+   `sw.js` がgstatic配信のFirebase SDKをキャッシュしていなかったため、圏外では
+   `import` が失敗してアプリが起動しない。→ SDK4本もキャッシュ対象に追加。
+   Playwrightで通信を完全遮断して起動することを確認済み(2026-09-27)。
+
+6. **地図の読み込み失敗が起動処理全体を巻き込む**
+   `ensureMapStarted()` が地図を先に await していたため、圏外だと同期も一覧も動かない。
+   → データ購読・同期・一覧を先に立ち上げ、地図は最後に、失敗しても他に影響しない形に。
+   地図が出せないときは一覧から記録を続けられる導線(`#mapFallback`)を用意した。
+
+7. **Service Workerの版数を上げ忘れると全端末が古いまま**
+   実際にこれで詰まった。→ `index.html` で `controllerchange` を拾って一度だけ自動
+   再読み込みするようにした。版数さえ上げれば利用者の操作は不要になる。
+   ただし**版数を上げる作業自体は自動化されていない**ので、`docs/` を触ったら
+   `sw.js` の `CACHE` を必ず上げること(現在 `field-visit-map-v3`)。
 
 ## 設計上の要点・既知の制約
 
@@ -73,26 +123,41 @@ Googleログイン有効化、承認済みドメイン追加、Storage開始、M
 Storage Rules(`firestore.exists()`のcross-service function)が両方これを参照する。
 追加・削除はMVPではFirebase Console上でKazさんが直接操作する運用(管理画面は作っていない)。
 
-### 未検証・要確認事項
-- Firestore Security Rulesの `.lower()` は `firebase deploy --only firestore:rules` が
-  実際に成功したことで構文的には検証済み(2026-09-26)。動作(大文字小文字を無視した
-  メールアドレス一致)自体はallowedUsers登録後の実機確認で確認すること。
-- `firebase-init.js` はFirebase JS SDK v12.4.0をCDNから読み込む設定にしている。デプロイ時に
-  404等が出る場合はバージョン番号を最新に更新すること(まだブラウザでの実読み込みは未確認)。
-- Google Maps JavaScript APIのMap ID(Advanced Markers用)は `config.js` に未設定のプレース
-  ホルダーのまま。`SETUP.md` の「残っている作業4」で発行が必要。
+### 検証済み・未検証の切り分け(2026-09-27時点)
+
+**自動テストで確認できたこと**(Playwright + システムのMicrosoft Edgeを使用。
+`chromium.launch({ channel: 'msedge' })` にしないとブラウザのダウンロードが要る):
+- 全モジュールが実際に読み込まれ、実行時エラーが出ないこと
+- 新規訪問者がログイン画面に到達すること(画面の重なりが無いこと)
+- **通信を完全遮断した状態でもアプリが起動し、ログイン画面まで到達すること**
+- Service Workerが23ファイル(Firebase SDK4本を含む)をキャッシュすること
+- スマホ幅(390px)で横スクロールが発生しないこと
+
+**まだ人の手でしか確認できないこと**(Googleログインが必要なため):
+- 実際のログイン → 地図表示 → ピン追加 → 訪問記録 → 写真添付の通し動作
+- 機内モードでの記録 → 復帰後の自動同期(Android・iPhone実機の両方で)
+- Storage Rulesが許可リスト外からの直アクセスを拒否すること
+
+### その他の要確認事項
 - 地図の初期表示位置(`config.js` の `defaultCenter`)はモザンビーク・リバウエ近郊を
-  仮置きしている。実際の巡回先に合わせて変更すること。
+  仮置き。ただし初回起動時は現在地に自動で寄せ、2回目以降は前回の表示位置を
+  localStorage(`fvm.view`)から復元するので、実害は初回のみ。
+- Firebase JS SDKは v12.4.0 固定。上げるときは `docs/lib/firebase-init.js` と
+  **`docs/sw.js` の `CDN_FILES`** の両方を直すこと(片方だけだとオフラインで起動しなくなる)。
 
 ## 次にやるべきこと
 
-1. `SETUP.md` の「残っている作業」1〜5をKazさんが実施。
-2. Storage開始・Map ID発行が終わったとKazさんから連絡が来たら、Claude Code側で
-   `firebase deploy --only storage` と `docs/config.js` のmapId更新+push を行う。
-3. `SETUP.md` の「動作確認」を実施。特に「機内モードでの記録→復帰後の自動同期」は
-   Android・iPhone実機の両方で確認すること(jatlog_offlineのHANDOVER.mdにも同様の教訓が
-   あるとおり、自動テストだけに頼らない)。
-4. Background Syncの制約(上記)が実運用で問題になるようなら、SW側でのFirebase Storage
+1. **`allowedUsers/mameyompo@gmail.com` がFirestoreに存在するか確認する(未確認)。**
+   無ければアプリは「アクセス権がありません」画面になる。Firebase Consoleの
+   Firestore Database → コレクション `allowedUsers` → ドキュメントID
+   `mameyompo@gmail.com`(小文字)→ フィールド `active`(boolean)= true。
+   ※ドキュメントIDがメールアドレスそのもの。ここを間違えると一致しない。
+   ※CLIにFirestoreのドキュメントを読み書きするコマンドは無く、Claude Code側からは
+   確認も作成もできない(生のcurl+アクセストークンは自動モード分類器にブロックされる)。
+2. Kazさんの実機で通し動作の確認(上記「まだ人の手でしか確認できないこと」)。
+3. 機内モードでの記録→復帰後の自動同期を、Android・iPhone実機の両方で確認する
+   (jatlog_offlineのHANDOVER.mdの教訓どおり、自動テストだけに頼らない)。
+4. チームメンバーのメールアドレスを `allowedUsers` に追加し、Kazさん以外の1名で
+   書き込みテストを行う。
+5. Background Syncの制約(上記)が実運用で問題になるようなら、SW側でのFirebase Storage
    REST APIの直接アップロード(トークン管理込み)を追加実装するかどうかをKazさんと相談する。
-5. アイコン画像(`manifest.webmanifest` の `icons` は空のまま)を用意するかどうか。
-   PWAとして「ホーム画面に追加」した際の見た目に影響するが、機能上は必須ではない。
