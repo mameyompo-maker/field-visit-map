@@ -75,6 +75,8 @@ function showPlaceSheet(latLng) {
   }
   $('placeSheetLatLng').textContent = `${latLng.lat.toFixed(6)}, ${latLng.lng.toFixed(6)}`;
   $('placeSheet').hidden = false;
+  // シートを出してから、その高さぶん隠れていないか確かめる(出す前だと高さが0)。
+  if (mapController) mapController.keepVisible(latLng, $('placeSheet').offsetHeight);
 }
 
 function hidePlaceSheet() {

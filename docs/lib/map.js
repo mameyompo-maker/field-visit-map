@@ -146,6 +146,23 @@ export async function createMapController(container, { onPinClick, onMapClick, o
     if (tempMarker) tempMarker.map = null;
   }
 
+  /* 画面下のほうを押すと、置いた仮ピンが「この場所」シートの裏に隠れてしまう。
+   * 隠れるときだけ地図を送る(毎回動かすと、押すたびに地図が跳ねて鬱陶しい)。
+   * 緯度→画面Y の換算は、この縮尺なら線形近似で誤差1px未満なので割り切る。 */
+  function keepVisible(pos, bottomPx) {
+    const bounds = map.getBounds();
+    if (!bounds) return;
+    const h = container.clientHeight;
+    const limit = h - bottomPx - 56;          // 56px = ピンの絵の高さぶん
+    if (limit <= 0) return;
+    const north = bounds.getNorthEast().lat();
+    const south = bounds.getSouthWest().lat();
+    if (north === south) return;
+    const y = ((north - pos.lat) / (north - south)) * h;
+    if (y <= limit) return;                   // 見えているので何もしない
+    map.panBy(0, Math.round(y - limit + 24)); // 24px は余白
+  }
+
   // ---------------------------------------------------------- 現在地の青い点
 
   let myDot = null;
@@ -239,6 +256,6 @@ export async function createMapController(container, { onPinClick, onMapClick, o
 
   return {
     map, render, centerOn, getCenter, locate, showMyLocation, whenTilesFail,
-    setTempPin, clearTempPin
+    setTempPin, clearTempPin, keepVisible
   };
 }

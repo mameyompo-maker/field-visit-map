@@ -14,7 +14,7 @@
  *  版数さえ上げれば利用者の操作は要らない。)
  */
 
-const CACHE = 'field-visit-map-v5';
+const CACHE = 'field-visit-map-v6';
 
 const FILES = [
   './',
