@@ -6,7 +6,7 @@
 <title>現場・圃場 巡回記録マップ</title>
 <link rel="manifest" href="./manifest.webmanifest">
 <meta name="theme-color" content="#ffffff">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📍</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><path fill=%22%23ea4335%22 d=%22M16 2a10 10 0 0 0-10 10c0 7.5 10 18 10 18s10-10.5 10-18A10 10 0 0 0 16 2z%22/><circle cx=%2216%22 cy=%2212%22 r=%223.8%22 fill=%22%23fff%22/></svg>">
 <link rel="apple-touch-icon" href="./icon-192.png">
 
 <!-- 初回表示を速くするための先行接続。DNS・TLSの往復を本体の読み込みと重ねる。 -->
@@ -20,10 +20,67 @@
 </head>
 <body>
 
+<!-- アイコン(自作)。絵文字は端末ごとに絵柄が変わり、大きさも揃わないので使わない。
+     ここに1か所だけ定義して、各所からは <use href="#i-..."> で参照する。
+     小さいアイコンは fill="currentColor" にしてあり、文字色に追従する。 -->
+<svg id="iconDefs" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+  <!-- 画面上部の大きな挿絵 -->
+  <symbol id="i-hero-map" viewBox="0 0 96 96">
+    <rect x="8" y="16" width="80" height="64" rx="12" fill="#e8f0fe"/>
+    <rect x="18" y="61" width="26" height="7" rx="3.5" fill="#c3d9fa"/>
+    <rect x="52" y="61" width="26" height="7" rx="3.5" fill="#c3d9fa"/>
+    <rect x="18" y="71" width="44" height="7" rx="3.5" fill="#c3d9fa"/>
+    <path d="M48 22a13 13 0 0 0-13 13c0 9.5 13 21 13 21s13-11.5 13-21a13 13 0 0 0-13-13z" fill="#ea4335"/>
+    <circle cx="48" cy="35" r="4.8" fill="#fff"/>
+  </symbol>
+  <symbol id="i-hero-lock" viewBox="0 0 96 96">
+    <circle cx="48" cy="48" r="38" fill="#e8eaed"/>
+    <path d="M36 46v-8a12 12 0 0 1 24 0v8" fill="none" stroke="#5f6368" stroke-width="6" stroke-linecap="round"/>
+    <rect x="29" y="45" width="38" height="28" rx="7" fill="#5f6368"/>
+    <circle cx="48" cy="56" r="4" fill="#fff"/>
+    <rect x="46.2" y="57" width="3.6" height="9" rx="1.8" fill="#fff"/>
+  </symbol>
+  <symbol id="i-hero-alert" viewBox="0 0 96 96">
+    <circle cx="48" cy="48" r="38" fill="#fef7e0"/>
+    <path d="M44.5 27.5a4 4 0 0 1 7 0L73 66.5a4 4 0 0 1-3.5 6h-43a4 4 0 0 1-3.5-6z" fill="#f9ab00"/>
+    <rect x="45" y="39" width="6" height="17" rx="3" fill="#fff"/>
+    <circle cx="48" cy="62" r="3.4" fill="#fff"/>
+  </symbol>
+
+  <!-- 小さいアイコン(24グリッド) -->
+  <symbol id="i-pin" viewBox="0 0 24 24">
+    <path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.6A2.6 2.6 0 1 1 14.6 9 2.6 2.6 0 0 1 12 11.6z"/>
+  </symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24">
+    <path fill-rule="evenodd" d="M9.2 3h5.6l1.7 2H20a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h3.5zM12 8.5a4.7 4.7 0 1 0 0 9.4 4.7 4.7 0 0 0 0-9.4zm0 2a2.7 2.7 0 1 1 0 5.4 2.7 2.7 0 0 1 0-5.4z"/>
+  </symbol>
+  <symbol id="i-image" viewBox="0 0 24 24">
+    <path fill-rule="evenodd" d="M4 3h16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm0 2v14h16v-3.6l-4.3-4.3-4.2 4.2-2.6-2.5L4 15.6zm4 1.6a1.9 1.9 0 1 1 0 3.8 1.9 1.9 0 0 1 0-3.8z"/>
+  </symbol>
+  <symbol id="i-download" viewBox="0 0 24 24">
+    <path d="M12 3a1 1 0 0 1 1 1v8.6l2.8-2.8 1.4 1.4-5.2 5.2-5.2-5.2 1.4-1.4L11 12.6V4a1 1 0 0 1 1-1zM4 18h16v2H4z"/>
+  </symbol>
+  <symbol id="i-map" viewBox="0 0 24 24">
+    <path d="M14.8 4.2 9.2 2.4 3.6 4.3A1 1 0 0 0 3 5.2v14.4a.8.8 0 0 0 1 .8l5.2-1.8 5.6 1.8 5.6-1.9a1 1 0 0 0 .6-.9V3.2a.8.8 0 0 0-1-.8zM9.9 4.6l4.2 1.4v13.4L9.9 18z"/>
+  </symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24">
+    <path fill-rule="evenodd" d="M13.6 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.4zM13 4.2 17.8 9H13zM8 12h8v1.8H8zm0 3.6h8v1.8H8z"/>
+  </symbol>
+  <symbol id="i-photos" viewBox="0 0 24 24">
+    <path fill-rule="evenodd" d="M8 2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm0 2v9.4l3.2-3.2 2.2 2.2 3.4-3.4L20 12.6V4zM2 6h2v14h14v2H4a2 2 0 0 1-2-2z"/>
+  </symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24">
+    <path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5v-2H5V5h5zm6.2 4.8-1.4 1.4L16.6 11H9v2h7.6l-1.8 1.8 1.4 1.4L20.4 12z"/>
+  </symbol>
+  <symbol id="i-compare" viewBox="0 0 24 24">
+    <path fill-rule="evenodd" d="M3 4h8v16H3zm10 0h8v16h-8zm2 2v12h4V6z"/>
+  </symbol>
+</svg>
+
 <!-- ログイン画面 -->
 <section id="screenLogin" class="screen" hidden>
   <div class="login-box">
-    <div class="icon">📍</div>
+    <svg class="hero-ic" aria-hidden="true"><use href="#i-hero-map"></use></svg>
     <h1>現場・圃場 巡回記録マップ</h1>
     <p>チームで共有する巡回記録アプリです。Googleアカウントでログインしてください。</p>
     <button id="btnSignIn" class="btn-primary btn-wide">Googleでログイン</button>
@@ -34,7 +91,7 @@
 <!-- 未許可画面 -->
 <section id="screenNotAllowed" class="screen" hidden>
   <div class="login-box">
-    <div class="icon">🔒</div>
+    <svg class="hero-ic" aria-hidden="true"><use href="#i-hero-lock"></use></svg>
     <h1>アクセス権がありません</h1>
     <p>このメールアドレスはまだ登録されていません。管理者に下のアドレスを伝えてください。</p>
     <div class="email-badge">
@@ -49,7 +106,7 @@
 <!-- 通信できずに判定できなかったとき -->
 <section id="screenError" class="screen" hidden>
   <div class="login-box">
-    <div class="icon">⚠️</div>
+    <svg class="hero-ic" aria-hidden="true"><use href="#i-hero-alert"></use></svg>
     <h1>アクセス権を確認できません</h1>
     <p>電波が届かない場所では、初回のログインだけはオンラインで行う必要があります。</p>
     <p id="errorDetail" class="hint"></p>
@@ -107,7 +164,12 @@
       <div id="userName" class="account-name"></div>
       <div id="userEmail" class="account-email"></div>
     </div>
-    <button id="btnSignOut" class="menu-item">ログアウト</button>
+    <button id="btnExport" class="menu-item">
+      <svg class="ic" aria-hidden="true"><use href="#i-download"></use></svg>データをダウンロード
+    </button>
+    <button id="btnSignOut" class="menu-item">
+      <svg class="ic" aria-hidden="true"><use href="#i-logout"></use></svg>ログアウト
+    </button>
   </div>
 
   <!-- 同期状態(Google マップの通知チップと同じ位置づけ) -->
@@ -163,10 +225,10 @@
     <p class="hint" id="visitFormWho"></p>
     <label>備考<textarea id="inpVisitNote" rows="4" maxlength="2000" placeholder="前回からの変化、作業内容、気づいたことなど"></textarea></label>
     <div class="photo-pick">
-      <label class="file-btn">📷 カメラで撮る
+      <label class="file-btn"><svg class="ic" aria-hidden="true"><use href="#i-camera"></use></svg>カメラで撮る
         <input id="inpVisitCamera" type="file" accept="image/*" capture="environment" hidden>
       </label>
-      <label class="file-btn">🖼 写真を選ぶ
+      <label class="file-btn"><svg class="ic" aria-hidden="true"><use href="#i-image"></use></svg>写真を選ぶ
         <input id="inpVisitLibrary" type="file" accept="image/*" multiple hidden>
       </label>
       <span id="visitPhotoCount" class="hint"></span>
@@ -177,6 +239,48 @@
       <button type="submit" id="btnSaveVisitForm" class="btn-primary">追加する</button>
     </div>
   </form>
+</dialog>
+
+<!-- データの書き出し -->
+<dialog id="dlgExport">
+  <div>
+    <h2>データをダウンロード</h2>
+    <p class="hint" id="exportSummary">数えています…</p>
+
+    <button id="btnExportKml" class="export-row" type="button">
+      <svg class="ic ic-28" aria-hidden="true"><use href="#i-map"></use></svg>
+      <span class="export-main">
+        <span class="export-title">地図(KML)</span>
+        <span class="export-sub">Google マイマップにそのまま読み込めます</span>
+      </span>
+    </button>
+
+    <button id="btnExportText" class="export-row" type="button">
+      <svg class="ic ic-28" aria-hidden="true"><use href="#i-doc"></use></svg>
+      <span class="export-main">
+        <span class="export-title">記録テキスト(ZIP)</span>
+        <span class="export-sub">Excel用のCSV・読みやすいMarkdown・JSON</span>
+      </span>
+    </button>
+
+    <button id="btnExportFull" class="export-row" type="button">
+      <svg class="ic ic-28" aria-hidden="true"><use href="#i-photos"></use></svg>
+      <span class="export-main">
+        <span class="export-title">写真つき一式(ZIP)</span>
+        <span class="export-sub">上のすべて + 写真の実体。枚数によっては時間がかかります</span>
+      </span>
+    </button>
+
+    <p class="hint" id="exportNote"></p>
+    <div id="exportProgress" hidden>
+      <div class="progress-track"><div id="exportBar" class="progress-bar"></div></div>
+      <p class="hint" id="exportStatus"></p>
+    </div>
+
+    <div class="dlg-actions">
+      <button type="button" id="btnCloseExport" class="btn-secondary">閉じる</button>
+    </div>
+  </div>
 </dialog>
 
 <!-- 写真の拡大表示 / 前回との見比べ -->

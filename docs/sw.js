@@ -14,7 +14,7 @@
  *  版数さえ上げれば利用者の操作は要らない。)
  */
 
-const CACHE = 'field-visit-map-v6';
+const CACHE = 'field-visit-map-v7';
 
 const FILES = [
   './',
@@ -30,11 +30,14 @@ const FILES = [
   './lib/map.js',
   './lib/offline-queue.js',
   './lib/sync-status.js',
+  './lib/zip.js',
+  './lib/export.js',
   './ui/pin-panel.js',
   './ui/pin-form.js',
   './ui/pin-list.js',
   './ui/visit-form.js',
   './ui/lightbox.js',
+  './ui/export-dialog.js',
   './ui/toast.js'
 ];
 

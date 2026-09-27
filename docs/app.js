@@ -13,6 +13,7 @@ import { startAutoSync } from './lib/offline-queue.js';
 import { openPinPanel, refreshPinData, closePinPanel, setPinPanelHandlers } from './ui/pin-panel.js';
 import { openPinForm } from './ui/pin-form.js';
 import { mountPinList, setPins, openPinList, closePinList } from './ui/pin-list.js';
+import { openExportDialog } from './ui/export-dialog.js';
 import { toast, errorToast } from './ui/toast.js';
 
 const $ = (id) => document.getElementById(id);
@@ -146,6 +147,11 @@ function wireMapScreen() {
     const menu = $('accountMenu');
     menu.hidden = !menu.hidden;
     if (!menu.hidden) closePinList();
+  });
+
+  $('btnExport').addEventListener('click', () => {
+    closeAccountMenu();
+    openExportDialog();
   });
 
   $('btnOpenListFromFallback').addEventListener('click', openPinList);

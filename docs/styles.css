@@ -53,7 +53,17 @@ button { font-family: inherit; color: inherit; }
   max-width: 420px; width: 100%; margin: 0 16px; padding: 36px 28px; text-align: center;
   background: #fff; border-radius: 16px; box-shadow: var(--shadow-2);
 }
-.login-box .icon { font-size: 2.4rem; margin-bottom: 8px; }
+/* 絵文字をやめて自作SVGにした。絵文字は端末ごとに絵柄も余白も違い、
+ * 大きさを揃えられないうえ、画面の印象が既製品っぽくなるため。 */
+.hero-ic { width: 92px; height: 92px; display: block; margin: 0 auto 16px; }
+.ic { width: 20px; height: 20px; fill: currentColor; flex: none; }
+.ic-28 { width: 28px; height: 28px; }
+.pin-row-icon .ic { width: 18px; height: 18px; color: var(--red); }
+.file-btn .ic { margin-right: 8px; color: var(--muted); }
+.btn-primary .ic, .btn-secondary .ic { margin-right: 8px; vertical-align: -4px; }
+.btn-primary .ic { color: #fff; }
+.btn-secondary .ic { color: var(--muted); width: 16px; height: 16px; vertical-align: -3px; }
+.menu-item .ic { margin-right: 12px; color: var(--muted); vertical-align: -4px; }
 .login-box h1 { font-size: 1.25rem; margin: 0 0 12px; }
 .login-box p { color: var(--muted); margin: 0 0 20px; line-height: 1.7; font-size: 0.95rem; }
 .login-box .btn-wide + .btn-wide { margin-top: 10px; }
@@ -151,7 +161,7 @@ button { font-family: inherit; color: inherit; }
 .account-name { font-weight: 500; }
 .account-email { color: var(--muted); font-size: 0.8rem; margin-top: 2px; word-break: break-all; }
 .menu-item {
-  display: block; width: 100%; text-align: left; background: transparent; border: none;
+  display: flex; align-items: center; width: 100%; text-align: left; background: transparent; border: none;
   padding: 12px; border-radius: 8px; cursor: pointer; font-size: 0.95rem;
 }
 .menu-item:hover { background: var(--bg); }
@@ -342,3 +352,29 @@ dialog input[type="text"]:focus, dialog textarea:focus { outline: 2px solid var(
   background: var(--warn-bg); color: var(--warn-fg); border: 2px dashed var(--warn-fg);
   display: grid; place-items: center; font-size: 0.7rem; text-align: center;
 }
+
+/* ------------------------------------------------------------ データの書き出し */
+
+#dlgExport { max-width: 460px; }
+#dlgExport h2 { margin-bottom: 6px; }
+
+.export-row {
+  display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
+  background: #fff; border: 1px solid var(--line); border-radius: 12px;
+  padding: 14px; margin-top: 10px; cursor: pointer; color: var(--text);
+}
+.export-row:hover { background: var(--bg); }
+.export-row:disabled { opacity: .5; cursor: default; }
+/* ダイアログを開くと最初のボタンに焦点が当たる。既定の黒い枠は重いので、
+ * キーボード操作のときだけ青い枠にする。 */
+.export-row:focus { outline: none; }
+.export-row:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.export-row .ic { color: var(--blue); }
+.export-main { min-width: 0; }
+.export-title { display: block; font-weight: 500; }
+.export-sub { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 3px; line-height: 1.5; }
+
+.progress-track {
+  height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 14px;
+}
+.progress-bar { height: 100%; width: 0; background: var(--blue); transition: width .2s; }

@@ -16,7 +16,7 @@ const [
   { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged },
   {
     initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-    doc, getDoc, collection, setDoc, updateDoc, onSnapshot, serverTimestamp, increment
+    doc, getDoc, getDocs, collection, setDoc, updateDoc, onSnapshot, serverTimestamp, increment
   }
 ] = await Promise.all([
   import(`${CDN}/firebase-app.js`),
@@ -60,5 +60,5 @@ export function getStorageApi() {
 export {
   cfg, app, auth, db,
   GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
-  doc, getDoc, collection, setDoc, updateDoc, onSnapshot, serverTimestamp, increment
+  doc, getDoc, getDocs, collection, setDoc, updateDoc, onSnapshot, serverTimestamp, increment
 };

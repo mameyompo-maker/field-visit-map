@@ -56,7 +56,7 @@ function render() {
     row.type = 'button';
     row.className = 'pin-row';
     row.innerHTML = `
-      <span class="pin-row-icon">📍</span>
+      <span class="pin-row-icon"><svg class="ic" aria-hidden="true"><use href="#i-pin"></use></svg></span>
       <span class="pin-row-main">
         <span class="pin-row-name">${esc(pin.name || '(名前なし)')}${pin._pendingWrite ? '<span class="pending-badge">未同期</span>' : ''}</span>
         <span class="pin-row-sub">${esc(pin.category || '')}${pin.category && pin.visitCount ? ' ・ ' : ''}${pin.visitCount ? `訪問${pin.visitCount}回` : ''}</span>

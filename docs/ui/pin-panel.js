@@ -128,9 +128,13 @@ function buildShell() {
     <p id="ppMeta" class="hint"></p>
     <p id="ppCreated" class="hint"></p>
     <p id="ppDesc" class="panel-desc"></p>
-    <button id="btnRecordVisit" class="btn-primary btn-wide">記録を追加(写真・備考)</button>
+    <button id="btnRecordVisit" class="btn-primary btn-wide">
+      <svg class="ic" aria-hidden="true"><use href="#i-camera"></use></svg>記録を追加(写真・備考)
+    </button>
     <div class="panel-actions">
-      <button id="btnCompare" class="btn-secondary" hidden>前回と見比べる</button>
+      <button id="btnCompare" class="btn-secondary" hidden>
+        <svg class="ic" aria-hidden="true"><use href="#i-compare"></use></svg>前回と見比べる
+      </button>
       <button id="btnCenterPin" class="btn-secondary">地図で見る</button>
       <button id="btnEditPin" class="btn-secondary">編集</button>
       <button id="btnArchivePin" class="btn-secondary">アーカイブ</button>
