@@ -68,7 +68,7 @@ function getPosition(options) {
  * 地図の空白部分をタップしてもピン追加フォームは開かない
  * (移動のたびにダイアログが出る誤操作が多すぎるため。追加は＋ボタンから行う)。
  */
-export async function createMapController(container, { onPinClick, onIdle } = {}) {
+export async function createMapController(container, { onPinClick, onMapClick, onIdle } = {}) {
   const maps = await loadMapsApi();
   const { Map: GoogleMap } = await maps.importLibrary('maps');
   const { AdvancedMarkerElement, PinElement } = await maps.importLibrary('marker');
@@ -97,6 +97,54 @@ export async function createMapController(container, { onPinClick, onIdle } = {}
     } catch { /* 保存できなくても動作には影響しない */ }
     if (onIdle) onIdle();
   });
+
+  /* 地図を押した場所にピンを落とす(Google マップと同じ操作感)。
+   * 既存ピンのタップはマーカー側が受け取るので、ここには流れてこない。
+   * 以前は押した瞬間にフォーム(モーダル)を開いていて誤操作が多かったため、
+   * ここでは「仮のピンを置いて下からシートを出す」までに留め、いつでも取り消せるようにする。 */
+  if (onMapClick) {
+    const handler = (e) => {
+      if (!e.latLng) return;
+      onMapClick({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+    };
+    map.addListener('click', handler);
+    map.addListener('contextmenu', handler);   // 長押し(端末によってはこちらが飛ぶ)
+  }
+
+  // ---------------------------------------------------------- 仮ピン(追加する場所の指定)
+
+  let tempMarker = null;
+
+  function normalize(p) {
+    if (!p) return null;
+    return {
+      lat: typeof p.lat === 'function' ? p.lat() : p.lat,
+      lng: typeof p.lng === 'function' ? p.lng() : p.lng
+    };
+  }
+
+  /** 追加位置を示す仮ピンを置く。ドラッグで微調整でき、確定位置を onMove で返す。 */
+  function setTempPin(pos, onMove) {
+    if (!tempMarker) {
+      const pin = new PinElement({
+        background: '#1a73e8', borderColor: '#174ea6', glyphColor: '#ffffff', scale: 1.2
+      });
+      tempMarker = new AdvancedMarkerElement({
+        map, position: pos, content: pin.element, gmpDraggable: true, zIndex: 5
+      });
+      tempMarker.addListener('dragend', () => {
+        const p = normalize(tempMarker.position);
+        if (p && onMove) onMove(p);
+      });
+    } else {
+      tempMarker.position = pos;
+      tempMarker.map = map;
+    }
+  }
+
+  function clearTempPin() {
+    if (tempMarker) tempMarker.map = null;
+  }
 
   // ---------------------------------------------------------- 現在地の青い点
 
@@ -189,5 +237,8 @@ export async function createMapController(container, { onPinClick, onIdle } = {}
     setTimeout(() => { if (!loaded) onFail(); }, ms);
   }
 
-  return { map, render, centerOn, getCenter, locate, showMyLocation, whenTilesFail };
+  return {
+    map, render, centerOn, getCenter, locate, showMyLocation, whenTilesFail,
+    setTempPin, clearTempPin
+  };
 }

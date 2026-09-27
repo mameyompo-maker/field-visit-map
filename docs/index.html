@@ -113,25 +113,25 @@
   <!-- 同期状態(Google マップの通知チップと同じ位置づけ) -->
   <button id="syncBar" hidden></button>
 
-  <!-- ピン追加時に中心を示す照準と確定バー -->
-  <div id="crosshair" hidden aria-hidden="true"></div>
-  <div id="placeBar" hidden>
-    <span>追加する場所に地図を合わせてください</span>
-    <div class="place-actions">
-      <button id="btnPlaceCancel" class="btn-secondary">やめる</button>
-      <button id="btnPlaceConfirm" class="btn-primary">ここに追加</button>
-    </div>
-  </div>
-
   <div id="mapControls">
     <button id="btnLocate" class="fab" title="現在地">
       <svg viewBox="0 0 24 24" width="24" height="24"><path fill="#1a73e8" d="M12 8a4 4 0 1 0 4 4 4 4 0 0 0-4-4m8.94 3A9 9 0 0 0 13 3.06V1h-2v2.06A9 9 0 0 0 3.06 11H1v2h2.06A9 9 0 0 0 11 20.94V23h2v-2.06A9 9 0 0 0 20.94 13H23v-2zM12 19a7 7 0 1 1 7-7 7 7 0 0 1-7 7"/></svg>
     </button>
-    <button id="btnAddPin" class="fab fab-primary" title="ここに場所を追加">
+    <button id="btnAddPin" class="fab fab-primary" title="画面の中心に場所を追加">
       <svg viewBox="0 0 24 24" width="26" height="26"><path fill="#fff" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>
     </button>
   </div>
 </section>
+
+<!-- 地図を押した場所に出る仮ピンのシート -->
+<aside id="placeSheet" class="panel panel-compact" hidden>
+  <div class="sheet-grabber" aria-hidden="true"></div>
+  <h2>この場所</h2>
+  <p class="hint" id="placeSheetLatLng"></p>
+  <p class="hint">青いピンをドラッグすると位置を微調整できます。</p>
+  <button id="btnAddHere" class="btn-primary btn-wide">ここに場所を追加</button>
+  <button id="btnCancelPlace" class="btn-secondary btn-wide">やめる</button>
+</aside>
 
 <!-- ピン詳細(下から出るシート) -->
 <aside id="pinPanel" class="panel" hidden>
@@ -148,6 +148,7 @@
     <label>説明<textarea id="inpPinDescription" rows="3" maxlength="1000"></textarea></label>
     <label>カテゴリ(任意)<input id="inpPinCategory" type="text" maxlength="60" placeholder="例: 圃場 / 育苗 / 倉庫"></label>
     <p class="hint">位置: <span id="pinFormLatLng"></span></p>
+    <p class="hint">追加した場所と記録は、チーム全員に共有されます。</p>
     <div class="dlg-actions">
       <button type="button" id="btnCancelPinForm" class="btn-secondary">キャンセル</button>
       <button type="submit" id="btnSavePinForm" class="btn-primary">保存</button>
@@ -155,12 +156,12 @@
   </form>
 </dialog>
 
-<!-- 訪問記録フォーム -->
+<!-- 記録の追加フォーム -->
 <dialog id="dlgVisitForm">
   <form id="formVisit" method="dialog">
-    <h2>訪問を記録</h2>
+    <h2>記録を追加</h2>
     <p class="hint" id="visitFormWho"></p>
-    <label>メモ<textarea id="inpVisitNote" rows="4" maxlength="2000" placeholder="作業内容、気づいたことなど"></textarea></label>
+    <label>備考<textarea id="inpVisitNote" rows="4" maxlength="2000" placeholder="前回からの変化、作業内容、気づいたことなど"></textarea></label>
     <div class="photo-pick">
       <label class="file-btn">📷 カメラで撮る
         <input id="inpVisitCamera" type="file" accept="image/*" capture="environment" hidden>
@@ -173,15 +174,25 @@
     <div id="visitPhotoPreview" hidden></div>
     <div class="dlg-actions">
       <button type="button" id="btnCancelVisitForm" class="btn-secondary">キャンセル</button>
-      <button type="submit" id="btnSaveVisitForm" class="btn-primary">記録する</button>
+      <button type="submit" id="btnSaveVisitForm" class="btn-primary">追加する</button>
     </div>
   </form>
 </dialog>
 
-<!-- 写真ライトボックス -->
+<!-- 写真の拡大表示 / 前回との見比べ -->
 <dialog id="dlgLightbox">
   <button id="btnCloseLightbox" class="btn-close">×</button>
   <img id="lightboxImg" alt="">
+  <div id="lightboxCompare" hidden>
+    <figure class="cmp-cell">
+      <img id="cmpOldImg" alt="前回の写真">
+      <figcaption id="cmpOldCap"></figcaption>
+    </figure>
+    <figure class="cmp-cell">
+      <img id="cmpNewImg" alt="今回の写真">
+      <figcaption id="cmpNewCap"></figcaption>
+    </figure>
+  </div>
 </dialog>
 
 <div id="toast" hidden></div>

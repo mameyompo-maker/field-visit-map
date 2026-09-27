@@ -24,8 +24,8 @@ function showScreen(id) {
 let mapController = null;
 let latestPins = [];
 let started = false;
-let placing = false;
 let pendingOpenPinId = null;
+let tempLatLng = null;   // 地図を押して置いた仮ピンの位置
 
 // ------------------------------------------------------------------ 地図
 
@@ -40,8 +40,9 @@ async function startMap() {
     mapController = await createMapController($('map'), {
       onPinClick: (pinId) => {
         const pin = latestPins.find((p) => p.id === pinId);
-        if (pin) { closePinList(); openPinPanel(pin); }
-      }
+        if (pin) { hidePlaceSheet(); closePinList(); openPinPanel(pin); }
+      },
+      onMapClick: (latLng) => showPlaceSheet(latLng)
     });
     mapController.render(latestPins);
     mapController.whenTilesFail(12000, () => {
@@ -58,13 +59,28 @@ async function startMap() {
 
 // ------------------------------------------------------------------ ピン追加
 
-function setPlacing(on) {
-  placing = on;
-  $('crosshair').hidden = !on;
-  $('placeBar').hidden = !on;
-  $('mapControls').hidden = on;
-  $('searchBar').hidden = on;
-  if (on) { closePinPanel(); closePinList(); closeAccountMenu(); }
+/* 地図を押した場所に仮ピンを置き、下からシートを出す(Google マップと同じ流れ)。
+ * 押した瞬間にフォームを開かないのは、地図を動かすたびにダイアログが出る誤操作を
+ * 避けるため。仮ピンはドラッグで微調整でき、「やめる」でいつでも取り消せる。 */
+function showPlaceSheet(latLng) {
+  tempLatLng = latLng;
+  closePinPanel();
+  closePinList();
+  closeAccountMenu();
+  if (mapController) {
+    mapController.setTempPin(latLng, (moved) => {
+      tempLatLng = moved;
+      $('placeSheetLatLng').textContent = `${moved.lat.toFixed(6)}, ${moved.lng.toFixed(6)}`;
+    });
+  }
+  $('placeSheetLatLng').textContent = `${latLng.lat.toFixed(6)}, ${latLng.lng.toFixed(6)}`;
+  $('placeSheet').hidden = false;
+}
+
+function hidePlaceSheet() {
+  $('placeSheet').hidden = true;
+  if (mapController) mapController.clearTempPin();
+  tempLatLng = null;
 }
 
 function currentPosition() {
@@ -93,7 +109,8 @@ async function addPinAt(latLng) {
 }
 
 async function beginAddPin() {
-  if (mapController) { setPlacing(true); return; }
+  // ＋ボタンは「画面の中心に置く」。地図を押して置く操作と同じシートに合流させる。
+  if (mapController) { showPlaceSheet(mapController.getCenter()); return; }
   // 地図が無いとき(圏外など)は現在地に置く道を用意する。
   toast('現在地を取得しています…');
   const pos = await currentPosition();
@@ -109,12 +126,11 @@ function closeAccountMenu() { $('accountMenu').hidden = true; }
 
 function wireMapScreen() {
   $('btnAddPin').addEventListener('click', beginAddPin);
-  $('btnPlaceCancel').addEventListener('click', () => setPlacing(false));
-  $('btnPlaceConfirm').addEventListener('click', () => {
-    if (!mapController) return;
-    const latLng = mapController.getCenter();
-    setPlacing(false);
-    addPinAt(latLng);
+  $('btnCancelPlace').addEventListener('click', hidePlaceSheet);
+  $('btnAddHere').addEventListener('click', () => {
+    const latLng = tempLatLng;
+    hidePlaceSheet();
+    if (latLng) addPinAt(latLng);
   });
 
   $('btnLocate').addEventListener('click', async () => {
@@ -149,7 +165,7 @@ function wireMapScreen() {
 
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if (placing) { setPlacing(false); return; }
+    if (!$('placeSheet').hidden) { hidePlaceSheet(); return; }
     closeAccountMenu();
     closePinList();
     closePinPanel();

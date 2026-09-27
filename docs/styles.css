@@ -200,25 +200,10 @@ button { font-family: inherit; color: inherit; }
 #mapFallback .hint { margin-bottom: 16px; display: block; line-height: 1.6; }
 #mapFallback .btn-wide + .btn-wide { margin-top: 10px; }
 
-/* ピン追加時の照準と確定バー */
-#crosshair {
-  position: fixed; left: 50%; top: 50%; z-index: 17;
-  width: 40px; height: 40px; margin: -20px 0 0 -20px;
-  pointer-events: none;
-}
-#crosshair::before, #crosshair::after { content: ''; position: absolute; background: var(--red); }
-#crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; margin-left: -1px; }
-#crosshair::after { top: 50%; left: 0; height: 2px; width: 100%; margin-top: -1px; }
-
-#placeBar {
-  position: fixed; left: 0; right: 0; z-index: 21; bottom: 0;
-  padding: 14px 16px; padding-bottom: max(14px, env(safe-area-inset-bottom));
-  background: #fff; border-top: 1px solid var(--line);
-  box-shadow: 0 -2px 12px rgba(60,64,67,.15);
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  flex-wrap: wrap; font-size: 0.9rem;
-}
-.place-actions { display: flex; gap: 8px; margin-left: auto; }
+/* 地図を押した場所に出る仮ピンのシート */
+#placeSheet h2 { font-size: 1.1rem; margin: 0 0 6px; font-weight: 500; }
+#placeSheet .btn-wide { margin-top: 10px; }
+.panel-compact { max-height: none; }
 
 /* ------------------------------------------------------------ 場所の詳細(下から出るシート) */
 
@@ -297,8 +282,26 @@ dialog input[type="text"]:focus, dialog textarea:focus { outline: 2px solid var(
 }
 
 #dlgLightbox { background: transparent; max-width: 100vw; max-height: 100vh; box-shadow: none; }
-#dlgLightbox img { max-width: 92vw; max-height: 86vh; display: block; margin: 0 auto; }
-#dlgLightbox .btn-close { position: fixed; top: 16px; right: 16px; background: #fff; }
+/* 写真を見る画面だけは背景をほぼ黒にする。薄いままだと後ろの地図が透けて
+ * 写真の色が読めず、白い日付キャプションも沈む。 */
+#dlgLightbox::backdrop { background: rgba(0,0,0,.88); }
+#dlgLightbox > img { max-width: 92vw; max-height: 86vh; display: block; margin: 0 auto; }
+#dlgLightbox .btn-close {
+  position: fixed; top: 16px; right: 16px;
+  background: rgba(0,0,0,.6); color: #fff;
+}
+
+/* 前回と今回を左右に並べて見比べる(変化を読むための画面) */
+#lightboxCompare { display: flex; gap: 8px; justify-content: center; align-items: flex-start; }
+.cmp-cell { margin: 0; flex: 1 1 0; min-width: 0; }
+.cmp-cell img {
+  width: 100%; max-height: 74vh; object-fit: contain; display: block;
+  background: #000; border-radius: 8px;
+}
+.cmp-cell figcaption {
+  color: #fff; font-size: 0.8rem; text-align: center; margin-top: 8px;
+  text-shadow: 0 1px 3px rgba(0,0,0,.8);
+}
 
 /* ------------------------------------------------------------ 訪問カード・通知 */
 
@@ -315,6 +318,12 @@ dialog input[type="text"]:focus, dialog textarea:focus { outline: 2px solid var(
 }
 .visit-card .when { font-size: 0.9rem; font-weight: 500; }
 .visit-card .who { color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
+/* 前回から何日空いたか。変化を読むときの手がかりなので、日付の隣で目立たせる。 */
+.gap-tag {
+  display: inline-block; margin-left: 4px; font-size: 0.72rem;
+  color: #1a73e8; background: #e8f0fe; border-radius: 12px; padding: 2px 8px;
+}
+.gap-tag.first { color: var(--muted); background: var(--bg); }
 .visit-card .note { margin-top: 8px; line-height: 1.6; white-space: pre-wrap; font-size: 0.95rem; }
 .pending-badge {
   display: inline-block; margin-left: 6px; font-size: 0.7rem; font-weight: 400;
