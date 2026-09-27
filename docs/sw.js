@@ -1,15 +1,20 @@
 /* field_visit_map — Service Worker。
  *
- * 2つのルールだけ(projects/jatlog_offline/docs/sw.js を踏襲):
+ * 3つのルールだけ(projects/jatlog_offline/docs/sw.js を踏襲):
  *   1. アプリ本体のファイルはキャッシュから返す(オフラインでも開ける)。裏で更新する。
- *   2. それ以外(Firestore/Storage/Maps APIへの通信)は絶対にキャッシュしない。
+ *   2. Firebase SDK(gstatic配信)もキャッシュする。これが無いとオフラインで
+ *      アプリが起動すらできない(app.js が import で止まり、読み込み中のまま固まる)。
+ *      URLにバージョン番号が入っていて中身が変わらないので、固定してよい。
+ *   3. それ以外(Firestore/Storage/Maps APIへの通信)は絶対にキャッシュしない。
  *      キャッシュすると、圏外復帰後も古いデータのままになる。
  *
  * ファイルを1つでも追加・変更したら CACHE のバージョン番号を必ず上げること。
  * 上げ忘れると、既に開いている端末が古い版のキャッシュを使い続ける。
+ * (index.html 側で controllerchange を拾って自動再読み込みするようにしてあるので、
+ *  版数さえ上げれば利用者の操作は要らない。)
  */
 
-const CACHE = 'field-visit-map-v2';
+const CACHE = 'field-visit-map-v3';
 
 const FILES = [
   './',
@@ -27,8 +32,21 @@ const FILES = [
   './lib/sync-status.js',
   './ui/pin-panel.js',
   './ui/pin-form.js',
+  './ui/pin-list.js',
   './ui/visit-form.js',
-  './ui/lightbox.js'
+  './ui/lightbox.js',
+  './ui/toast.js'
+];
+
+/* Firebase SDK。各プロダクトのモジュールは firebase-app.js だけを import するので、
+ * この4つでモジュールの依存はすべて閉じる(2026-09時点の12.4.0で確認)。
+ * firebase-init.js のバージョンを上げたらここも一緒に直すこと。 */
+const SDK = 'https://www.gstatic.com/firebasejs/12.4.0';
+const CDN_FILES = [
+  `${SDK}/firebase-app.js`,
+  `${SDK}/firebase-auth.js`,
+  `${SDK}/firebase-firestore.js`,
+  `${SDK}/firebase-storage.js`
 ];
 
 const ROOT = new URL('./', self.location).pathname;
@@ -40,12 +58,19 @@ function isAppFile(url) {
   return NAMES.indexOf(url.pathname.slice(ROOT.length)) >= 0;
 }
 
+function isCdnFile(url) {
+  return CDN_FILES.indexOf(url.origin + url.pathname) >= 0;
+}
+
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE)
-      .then((c) => c.addAll(FILES))
-      .then(() => self.skipWaiting())
-      .catch(() => self.skipWaiting())
+    caches.open(CACHE).then(async (c) => {
+      // アプリ本体は1つでも欠けると動かないのでまとめて取得する。
+      await c.addAll(FILES).catch(() => {});
+      // SDKは1つ失敗しても残りは活かしたいので個別に。
+      await Promise.allSettled(CDN_FILES.map((u) => c.add(u)));
+      await self.skipWaiting();
+    }).catch(() => self.skipWaiting())
   );
 });
 
@@ -64,12 +89,15 @@ self.addEventListener('fetch', (e) => {
   let url;
   try { url = new URL(req.url); } catch { return; }
 
-  if (url.origin !== self.location.origin || !isAppFile(url)) return;
+  const sameOriginApp = url.origin === self.location.origin && isAppFile(url);
+  const cdn = isCdnFile(url);
+  if (!sameOriginApp && !cdn) return;
 
   e.respondWith(
-    caches.match(req).then((cached) => {
+    // gstatic は Vary ヘッダを返すことがあり、既定の照合だと当たらない場合がある。
+    caches.match(req, { ignoreVary: true }).then((cached) => {
       const fromNetwork = fetch(req).then((res) => {
-        if (res && res.status === 200 && res.type === 'basic') {
+        if (res && res.status === 200 && (res.type === 'basic' || res.type === 'cors')) {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy));
         }

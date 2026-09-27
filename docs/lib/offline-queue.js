@@ -83,6 +83,21 @@ export function listPending() {
   return listAll().then((all) => (all || []).filter((r) => r.state !== 'synced'));
 }
 
+/**
+ * まだアップロードできていない写真を photoId をキーにして返す。
+ * 圏外で撮った直後はStorageにURLが無く、Firestore側のサムネもnullのままなので、
+ * 画面にはこの手元のBlobを出す(「撮ったのに何も写らない」を避ける)。
+ */
+export function pendingBlobsByPhotoId() {
+  return listAll().then((all) => {
+    const map = {};
+    (all || []).forEach((r) => {
+      if (r.photoId && !map[r.photoId]) map[r.photoId] = r.thumbBlob || r.blob;
+    });
+    return map;
+  });
+}
+
 export function getItem(id) {
   return withStore('readonly', (s) => s.get(id));
 }
@@ -125,7 +140,9 @@ export function onQueueChange(fn) {
 async function emitState() {
   const pending = await listPending();
   const info = {
-    pendingCount: pending.filter((p) => p.state === 'pending').length,
+    // 送信中('uploading')も「まだ手元にある」ことに変わりはないので待ち件数に数える。
+    // 数えないと、送信中だけ件数が一瞬減って見え、増減がちらつく。
+    pendingCount: pending.filter((p) => p.state !== 'error').length,
     errorCount: pending.filter((p) => p.state === 'error').length,
     flushing,
     offline: !lastRequestOk
@@ -139,28 +156,45 @@ function markNetwork(ok) {
   lastRequestOk = ok;
 }
 
+/* 失敗した写真を25秒ごとに永遠に叩き続けると、電波の弱い現場で電池を浪費する。
+ * 失敗回数に応じて間隔を空ける(上限5分)。成功すればキューから消えるので、
+ * 「圏内に入ったのに送られない」時間が長くなりすぎないよう上限は短めにしてある。 */
+function nextRetryAt(item) {
+  const attempts = item.attempts || 0;
+  if (!attempts) return 0;
+  const wait = Math.min(5 * 60 * 1000, 20000 * Math.pow(2, attempts - 1));
+  return (item.lastAttemptAt || 0) + wait;
+}
+
 export async function flush() {
   if (flushing || !processor) return;
-  if (!navigator.onLine) { await emitState(); return; }
+  // navigator.onLine は「true=つながっている」の保証にはならないが、
+  // 「false=つながっていない」はまず正しいので、ここだけは信用して無駄打ちを省く。
+  if (!navigator.onLine) { markNetwork(false); await emitState(); return; }
 
   flushing = true;
   await emitState();
 
-  const items = (await listAll()).filter((r) => r.state !== 'uploading');
+  const now = Date.now();
+  // 'uploading' のまま残っているのは、前回アップロード中にアプリが閉じられた残骸。
+  // 同時に走る flush は1つだけ(flushingで保護)なので、ここでは再送対象に含めてよい。
+  const items = (await listAll()).filter((r) => r.state !== 'synced' && nextRetryAt(r) <= now);
   for (const item of items) {
     try {
-      await updateItem(item.id, { state: 'uploading' });
+      await updateItem(item.id, { state: 'uploading', lastAttemptAt: Date.now() });
       await processor(item);
       markNetwork(true);
       await remove(item.id);
     } catch (err) {
-      markNetwork(err && err.networkError === false ? true : false);
+      markNetwork(false);
       await updateItem(item.id, {
         state: 'error',
         attempts: (item.attempts || 0) + 1,
+        lastAttemptAt: Date.now(),
         lastError: (err && err.message) || String(err)
       });
     }
+    await emitState();
   }
 
   flushing = false;
@@ -198,8 +232,11 @@ export function syncNow() {
   return flush();
 }
 
+/** 手動の「今すぐ同期」からの再試行。待ち時間(バックオフ)は無視して即座に送る。 */
 export async function retryErrors() {
-  const items = (await listAll()).filter((r) => r.state === 'error');
-  await Promise.all(items.map((i) => updateItem(i.id, { state: 'pending' })));
+  const items = (await listAll()).filter((r) => r.state !== 'synced');
+  await Promise.all(items.map((i) => updateItem(i.id, {
+    state: 'pending', attempts: 0, lastAttemptAt: 0
+  })));
   return flush();
 }

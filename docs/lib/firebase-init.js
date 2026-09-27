@@ -7,18 +7,24 @@
 const SDK_VERSION = '12.4.0';
 const CDN = `https://www.gstatic.com/firebasejs/${SDK_VERSION}`;
 
-const { initializeApp } = await import(`${CDN}/firebase-app.js`);
-const {
-  getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
-} = await import(`${CDN}/firebase-auth.js`);
-const {
-  initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  doc, getDoc, collection, addDoc, setDoc, updateDoc, onSnapshot, serverTimestamp,
-  query, where, orderBy, waitForPendingWrites, increment
-} = await import(`${CDN}/firebase-firestore.js`);
-const {
-  getStorage, ref, uploadBytesResumable, getDownloadURL
-} = await import(`${CDN}/firebase-storage.js`);
+/* 4つのSDKを1つずつ await すると、前のダウンロードが終わるまで次のリクエストが
+ * 始まらず、往復が4回直列に積み上がって初回表示が体感で遅くなる。
+ * 互いに依存していないので必ず並列で取りに行く。 */
+const [
+  { initializeApp },
+  { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged },
+  {
+    initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+    doc, getDoc, collection, addDoc, setDoc, updateDoc, onSnapshot, serverTimestamp,
+    query, where, orderBy, waitForPendingWrites, increment
+  },
+  { getStorage, ref, uploadBytesResumable, getDownloadURL }
+] = await Promise.all([
+  import(`${CDN}/firebase-app.js`),
+  import(`${CDN}/firebase-auth.js`),
+  import(`${CDN}/firebase-firestore.js`),
+  import(`${CDN}/firebase-storage.js`)
+]);
 
 const cfg = window.FIELD_VISIT_MAP_CONFIG;
 if (!cfg || !cfg.firebase || !cfg.firebase.apiKey || cfg.firebase.apiKey === 'YOUR_API_KEY') {

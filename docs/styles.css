@@ -2,9 +2,15 @@
   --primary: #2563eb;
   --primary-dark: #1e3a8a;
   --danger: #dc2626;
+  --warn-bg: #fef3c7;
+  --warn-fg: #92400e;
   --bg: #f8fafc;
   --text: #0f172a;
+  --muted: #64748b;
   --border: #e2e8f0;
+  --radius: 12px;
+  --shadow: 0 2px 10px rgba(15, 23, 42, .12);
+  --topbar-h: 52px;
 }
 
 * { box-sizing: border-box; }
@@ -17,129 +23,277 @@
 
 html, body {
   margin: 0; padding: 0; height: 100%;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
   color: var(--text);
   background: var(--bg);
+  -webkit-text-size-adjust: 100%;
 }
+
+button { font-family: inherit; }
 
 .screen {
   position: fixed; inset: 0;
   display: flex; align-items: center; justify-content: center;
+  overflow-y: auto;
 }
 
 #screenMap { display: block; }
 
+/* ------------------------------------------------------------ ログイン等のカード */
+
 .login-box {
-  max-width: 420px; width: 100%; margin: 0 16px; padding: 40px 32px; text-align: center;
+  max-width: 420px; width: 100%; margin: 0 16px; padding: 36px 28px; text-align: center;
   background: #fff; border-radius: 16px;
   box-shadow: 0 10px 40px rgba(15, 23, 42, .08);
 }
-.login-box .icon { font-size: 2.2rem; margin-bottom: 8px; }
-.login-box h1 { font-size: 1.3rem; margin-bottom: 12px; }
-.login-box p { color: #475569; margin-bottom: 24px; line-height: 1.6; }
-
-#screenLoading { color: #64748b; font-size: 0.95rem; }
+.login-box .icon { font-size: 2.4rem; margin-bottom: 8px; }
+.login-box h1 { font-size: 1.25rem; margin: 0 0 12px; }
+.login-box p { color: #475569; margin: 0 0 20px; line-height: 1.7; font-size: 0.95rem; }
+.login-box .btn-wide + .btn-wide { margin-top: 10px; }
+.loading-text { color: var(--muted); }
+.error-text { color: var(--danger); margin-top: 14px; }
 
 .email-badge {
   display: flex; align-items: center; gap: 8px; justify-content: center;
-  background: #fff; border: 1px solid var(--border); border-radius: 8px;
-  padding: 8px 12px; margin-bottom: 20px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; margin-bottom: 20px; word-break: break-all;
+}
+.email-badge button {
+  border: 1px solid var(--border); background: #fff; border-radius: 6px;
+  padding: 6px 10px; cursor: pointer; flex-shrink: 0;
 }
 
-.btn-primary, .btn-secondary, .btn-link {
-  font-size: 1rem; padding: 10px 20px; border-radius: 8px; cursor: pointer;
-  border: none;
+/* ------------------------------------------------------------ ボタン */
+
+.btn-primary, .btn-secondary, .btn-link, .file-btn {
+  font-size: 1rem; padding: 12px 20px; border-radius: 10px; cursor: pointer;
+  border: none; min-height: 44px;   /* 手袋でも押せる大きさを確保する */
 }
-.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary { background: var(--primary); color: #fff; font-weight: 600; }
 .btn-primary:hover { background: var(--primary-dark); }
 .btn-secondary { background: #fff; border: 1px solid var(--border); color: var(--text); }
-.btn-link { background: none; color: var(--primary); text-decoration: underline; }
+.btn-secondary:hover { background: var(--bg); }
+.btn-link { background: none; color: var(--primary); padding: 8px 10px; min-height: 40px; }
+.btn-wide { display: block; width: 100%; }
+.btn-icon {
+  background: #fff; border: 1px solid var(--border); color: var(--text);
+  border-radius: 8px; padding: 8px 12px; min-height: 40px; cursor: pointer; font-size: 0.9rem;
+}
+
+/* ------------------------------------------------------------ 地図画面 */
 
 #topBar {
   position: fixed; top: 0; left: 0; right: 0; z-index: 20;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 14px; background: #fff; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top));
+  background: #fff; border-bottom: 1px solid var(--border);
+  min-height: var(--topbar-h);
 }
-#userBadge { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; }
-#userPhoto { width: 28px; height: 28px; border-radius: 50%; background: var(--border); }
+#userBadge {
+  display: flex; align-items: center; gap: 8px; font-size: 0.9rem;
+  min-width: 0; overflow: hidden;
+}
+#userName { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#userPhoto { width: 28px; height: 28px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
+.top-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
 #syncBar {
-  position: fixed; top: 48px; left: 0; right: 0; z-index: 19;
-  padding: 6px 14px; font-size: 0.85rem; text-align: center;
-  background: #fef3c7; color: #92400e; cursor: pointer;
+  position: fixed; top: var(--topbar-h); left: 0; right: 0; z-index: 19;
+  top: calc(var(--topbar-h) + env(safe-area-inset-top));
+  padding: 8px 14px; font-size: 0.85rem; text-align: center;
+  background: var(--warn-bg); color: var(--warn-fg); cursor: pointer;
 }
 
-#map { position: fixed; top: 0; left: 0; right: 0; bottom: 0; }
+#map { position: fixed; inset: 0; background: var(--bg); }
+
+#mapFallback {
+  position: fixed; z-index: 16;
+  left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(420px, calc(100vw - 32px));
+  background: #fff; border-radius: 16px; padding: 24px; text-align: center;
+  box-shadow: 0 10px 40px rgba(15, 23, 42, .12);
+}
+.fallback-title { font-weight: 600; margin: 0 0 8px; }
+#mapFallback .hint { margin-bottom: 16px; display: block; line-height: 1.6; }
+#mapFallback .btn-wide + .btn-wide { margin-top: 10px; }
 
 #mapControls {
-  position: fixed; right: 16px; bottom: 24px; z-index: 15;
+  position: fixed; right: 16px; z-index: 15;
+  bottom: max(24px, env(safe-area-inset-bottom));
   display: flex; flex-direction: column; gap: 12px;
 }
 .fab {
-  width: 52px; height: 52px; border-radius: 50%; border: none;
-  background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.2);
-  font-size: 1.4rem; cursor: pointer;
+  width: 56px; height: 56px; border-radius: 50%; border: none;
+  background: #fff; box-shadow: var(--shadow);
+  font-size: 1.5rem; cursor: pointer; display: grid; place-items: center;
 }
 .fab-primary { background: var(--primary); color: #fff; }
 
 .btn-sync-now {
-  position: fixed; left: 16px; bottom: 24px; z-index: 15;
-  padding: 10px 16px; border-radius: 999px; border: none;
-  background: var(--primary); color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.2);
-  cursor: pointer;
+  position: fixed; left: 16px; z-index: 15;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  padding: 12px 18px; border-radius: 999px; border: none;
+  background: var(--primary); color: #fff; box-shadow: var(--shadow);
+  cursor: pointer; font-size: 0.9rem;
 }
+
+/* ピン追加時の照準と確定バー */
+#crosshair {
+  position: fixed; left: 50%; top: 50%; z-index: 18;
+  width: 40px; height: 40px; margin: -20px 0 0 -20px;
+  pointer-events: none;
+}
+#crosshair::before, #crosshair::after {
+  content: ''; position: absolute; background: var(--danger);
+}
+#crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; margin-left: -1px; }
+#crosshair::after { top: 50%; left: 0; height: 2px; width: 100%; margin-top: -1px; }
+
+#placeBar {
+  position: fixed; left: 0; right: 0; z-index: 21;
+  bottom: 0; padding: 14px 16px;
+  padding-bottom: max(14px, env(safe-area-inset-bottom));
+  background: #fff; border-top: 1px solid var(--border);
+  box-shadow: 0 -2px 12px rgba(15, 23, 42, .1);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  flex-wrap: wrap; font-size: 0.9rem;
+}
+.place-actions { display: flex; gap: 8px; margin-left: auto; }
+
+/* ------------------------------------------------------------ パネル(右: ピン詳細 / 左: 一覧) */
 
 .panel {
   position: fixed; z-index: 25; background: #fff;
-  box-shadow: -2px 0 12px rgba(0,0,0,.15);
-  overflow-y: auto;
+  box-shadow: -2px 0 12px rgba(0, 0, 0, .15);
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
   top: 0; right: 0; bottom: 0; width: min(420px, 100vw);
   padding: 16px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+.panel-left {
+  right: auto; left: 0;
+  box-shadow: 2px 0 12px rgba(0, 0, 0, .15);
 }
 @media (max-width: 640px) {
-  .panel { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 75vh; border-radius: 16px 16px 0 0; }
+  .panel {
+    top: auto; left: 0; right: 0; bottom: 0; width: auto;
+    max-height: 80vh; border-radius: 16px 16px 0 0;
+    box-shadow: 0 -2px 16px rgba(0, 0, 0, .18);
+  }
 }
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-bottom: 10px;
+}
+.panel-head h2 { font-size: 1.05rem; margin: 0; }
 .btn-close {
-  position: absolute; top: 10px; right: 10px;
-  width: 32px; height: 32px; border-radius: 50%; border: none;
-  background: var(--bg); font-size: 1.2rem; cursor: pointer;
+  width: 36px; height: 36px; border-radius: 50%; border: none;
+  background: var(--bg); font-size: 1.2rem; cursor: pointer; flex-shrink: 0;
 }
+#pinPanel .btn-close { position: absolute; top: 12px; right: 12px; z-index: 1; }
+
+#pinPanelBody h2 { font-size: 1.15rem; margin: 0 8px 6px 0; padding-right: 40px; }
+#pinPanelBody h3 { font-size: 0.95rem; margin: 22px 0 10px; color: var(--muted); }
+.panel-desc { margin: 8px 0 14px; line-height: 1.6; white-space: pre-wrap; }
+.panel-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
+.panel-actions .btn-secondary { flex: 1 1 auto; font-size: 0.9rem; padding: 10px 12px; }
+
+/* ピン一覧 */
+#inpPinSearch {
+  width: 100%; padding: 12px 14px; font-size: 1rem; margin-bottom: 12px;
+  border: 1px solid var(--border); border-radius: 10px; font-family: inherit;
+}
+.pin-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; text-align: left; background: #fff; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px; margin-bottom: 8px; font-size: 0.95rem;
+}
+.pin-row:hover { background: var(--bg); }
+.pin-row-main { min-width: 0; }
+.pin-row-name { display: block; font-weight: 600; }
+.pin-row-sub { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
+.pin-row-side { text-align: right; color: var(--muted); font-size: 0.8rem; flex-shrink: 0; }
+.pin-row-date { display: block; }
+
+/* ------------------------------------------------------------ ダイアログ */
 
 dialog {
-  border: none; border-radius: 12px; padding: 0;
+  border: none; border-radius: 14px; padding: 0;
   max-width: min(520px, 92vw); width: 100%;
+  max-height: 88vh;   /* スマホでキーボードが出ても操作できるようにする */
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, .3);
 }
-dialog::backdrop { background: rgba(15,23,42,.4); }
-dialog form, dialog > * { padding: 20px; }
-dialog h2 { margin-top: 0; }
+dialog::backdrop { background: rgba(15, 23, 42, .45); }
+dialog form, dialog > *:not(form) { padding: 20px; }
+dialog h2 { margin-top: 0; font-size: 1.1rem; }
 dialog label { display: block; margin-bottom: 14px; font-size: 0.9rem; color: #334155; }
-dialog input, dialog textarea {
-  display: block; width: 100%; margin-top: 4px; padding: 8px 10px;
-  border: 1px solid var(--border); border-radius: 6px; font-size: 1rem; font-family: inherit;
+dialog input[type="text"], dialog textarea {
+  display: block; width: 100%; margin-top: 6px; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 8px;
+  font-size: 16px;   /* 16px未満だとiOSが入力時に勝手に拡大する */
+  font-family: inherit;
 }
-.dlg-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
-.hint { color: #64748b; font-size: 0.85rem; }
+.dlg-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.dlg-actions button { flex: 1 1 0; }
+.hint { color: var(--muted); font-size: 0.85rem; }
 
-#dlgLightbox { background: transparent; max-width: 100vw; }
-#dlgLightbox img { max-width: 92vw; max-height: 88vh; display: block; margin: 0 auto; }
+/* 写真の選択 */
+.photo-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.file-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #fff; border: 1px solid var(--border); color: var(--text);
+  font-size: 0.95rem; margin: 0;
+}
+.file-btn:hover { background: var(--bg); }
+#visitPhotoPreview { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.preview-cell { position: relative; }
+.preview-cell img {
+  width: 76px; height: 76px; object-fit: cover; border-radius: 8px;
+  background: var(--border); display: block;
+}
+.preview-remove {
+  position: absolute; top: -6px; right: -6px;
+  width: 24px; height: 24px; border-radius: 50%; border: none;
+  background: #0f172a; color: #fff; font-size: 0.9rem; line-height: 1; cursor: pointer;
+}
+
+#dlgLightbox { background: transparent; max-width: 100vw; max-height: 100vh; box-shadow: none; }
+#dlgLightbox img { max-width: 92vw; max-height: 86vh; display: block; margin: 0 auto; }
+#dlgLightbox .btn-close { position: fixed; top: 16px; right: 16px; background: #fff; }
+
+/* ------------------------------------------------------------ 訪問カード・通知 */
 
 #toast {
-  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
-  z-index: 40; background: #0f172a; color: #fff; padding: 10px 18px;
-  border-radius: 999px; font-size: 0.9rem;
+  position: fixed; bottom: 96px; left: 50%; transform: translateX(-50%);
+  z-index: 40; background: #0f172a; color: #fff; padding: 12px 20px;
+  border-radius: 999px; font-size: 0.9rem; max-width: 88vw; text-align: center;
+  box-shadow: var(--shadow);
 }
 
 .visit-card {
   border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 10px;
+  background: #fff;
 }
-.visit-card .who { font-weight: 600; }
-.visit-card .when { color: #64748b; font-size: 0.8rem; }
-.visit-card .pending-badge {
-  display: inline-block; margin-left: 6px; font-size: 0.75rem;
-  color: #92400e; background: #fef3c7; border-radius: 999px; padding: 1px 8px;
+.visit-card .when { color: var(--text); font-size: 0.9rem; font-weight: 600; }
+.visit-card .who { color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
+.visit-card .note { margin-top: 8px; line-height: 1.6; white-space: pre-wrap; }
+.pending-badge {
+  display: inline-block; margin-left: 6px; font-size: 0.75rem; font-weight: 400;
+  color: var(--warn-fg); background: var(--warn-bg); border-radius: 999px; padding: 2px 8px;
+  vertical-align: middle;
 }
-.photo-thumbs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.photo-thumbs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .photo-thumbs img {
-  width: 64px; height: 64px; object-fit: cover; border-radius: 6px; cursor: pointer;
+  width: 72px; height: 72px; object-fit: cover; border-radius: 8px; cursor: pointer;
   background: var(--border);
+}
+/* 送信待ちの写真は手元のBlobを薄く出す(「撮ったのに何も無い」を避ける) */
+.photo-thumbs img.photo-pending { opacity: .55; outline: 2px dashed var(--warn-fg); outline-offset: -2px; }
+.photo-placeholder {
+  width: 72px; height: 72px; border-radius: 8px;
+  background: var(--warn-bg); color: var(--warn-fg);
+  border: 2px dashed var(--warn-fg);
+  display: grid; place-items: center; font-size: 0.7rem; text-align: center;
 }

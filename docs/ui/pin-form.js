@@ -18,9 +18,12 @@ export function openPinForm({ lat, lng, pin } = {}) {
     $('pinFormLatLng').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
 
     let settled = false;
+    function onCancelClick() { dlg.close(); }
     function cleanup() {
       form.removeEventListener('submit', onSubmit);
-      $('btnCancelPinForm').removeEventListener('click', onCancel);
+      // ここで外すのは実際に登録した onCancelClick。以前は登録していない関数を
+      // 外そうとしていて、フォームを開くたびに匿名のリスナーが積み上がっていた。
+      $('btnCancelPinForm').removeEventListener('click', onCancelClick);
       dlg.removeEventListener('close', onCancel);
     }
     function onSubmit(e) {
@@ -42,8 +45,9 @@ export function openPinForm({ lat, lng, pin } = {}) {
     }
 
     form.addEventListener('submit', onSubmit);
-    $('btnCancelPinForm').addEventListener('click', () => { dlg.close(); });
+    $('btnCancelPinForm').addEventListener('click', onCancelClick);
     dlg.addEventListener('close', onCancel);
     dlg.showModal();
+    $('inpPinName').focus();
   });
 }

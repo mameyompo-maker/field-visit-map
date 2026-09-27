@@ -6,6 +6,16 @@
 <title>現場・圃場 巡回記録マップ</title>
 <link rel="manifest" href="./manifest.webmanifest">
 <meta name="theme-color" content="#2563eb">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📍</text></svg>">
+<link rel="apple-touch-icon" href="./icon-192.png">
+
+<!-- 初回表示を速くするための先行接続。DNS・TLSの往復を本体の読み込みと重ねる。 -->
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://maps.googleapis.com">
+<link rel="preconnect" href="https://maps.gstatic.com">
+<link rel="preconnect" href="https://firestore.googleapis.com">
+<link rel="preconnect" href="https://identitytoolkit.googleapis.com">
+
 <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
@@ -16,7 +26,8 @@
     <div class="icon">📍</div>
     <h1>現場・圃場 巡回記録マップ</h1>
     <p>チームで共有する巡回記録アプリです。Googleアカウントでログインしてください。</p>
-    <button id="btnSignIn" class="btn-primary">Googleでログイン</button>
+    <button id="btnSignIn" class="btn-primary btn-wide">Googleでログイン</button>
+    <p id="loginError" class="hint error-text" hidden></p>
   </div>
 </section>
 
@@ -30,28 +41,69 @@
       <code id="notAllowedEmail"></code>
       <button id="btnCopyEmail" type="button">コピー</button>
     </div>
-    <button id="btnSignOutFromNotAllowed" class="btn-secondary">別のアカウントでログイン</button>
+    <button id="btnRecheck" class="btn-primary btn-wide">登録済みなら、もう一度確認</button>
+    <button id="btnSignOutFromNotAllowed" class="btn-secondary btn-wide">別のアカウントでログイン</button>
+  </div>
+</section>
+
+<!-- 通信できずに判定できなかったとき -->
+<section id="screenError" class="screen" hidden>
+  <div class="login-box">
+    <div class="icon">⚠️</div>
+    <h1>アクセス権を確認できません</h1>
+    <p>電波が届かない場所では、初回のログインだけはオンラインで行う必要があります。</p>
+    <p id="errorDetail" class="hint"></p>
+    <button id="btnRetryCheck" class="btn-primary btn-wide">もう一度試す</button>
+    <button id="btnSignOutFromError" class="btn-secondary btn-wide">ログアウト</button>
   </div>
 </section>
 
 <!-- 読み込み中 -->
 <section id="screenLoading" class="screen">
-  <p>読み込み中…</p>
+  <div class="login-box">
+    <p class="loading-text">読み込み中…</p>
+    <div id="loadingHelp" hidden>
+      <p class="hint">時間がかかっています。電波が弱いか、古いデータが端末に残っている可能性があります。</p>
+      <button id="btnReload" class="btn-secondary btn-wide">再読み込み</button>
+      <button id="btnHardReset" class="btn-secondary btn-wide">保存データを消して再読み込み</button>
+    </div>
+  </div>
 </section>
 
 <!-- メイン画面 -->
 <section id="screenMap" class="screen" hidden>
   <header id="topBar">
     <div id="userBadge">
-      <img id="userPhoto" alt="">
+      <img id="userPhoto" alt="" hidden>
       <span id="userName"></span>
     </div>
-    <button id="btnSignOut" class="btn-link">ログアウト</button>
+    <div class="top-actions">
+      <button id="btnList" class="btn-icon" title="ピン一覧">一覧</button>
+      <button id="btnSignOut" class="btn-link">ログアウト</button>
+    </div>
   </header>
 
   <div id="syncBar" hidden></div>
 
   <div id="map"></div>
+
+  <!-- 地図が読めないとき(圏外など)でも記録を続けられるようにする -->
+  <div id="mapFallback" hidden>
+    <p class="fallback-title">地図を表示できません</p>
+    <p class="hint">電波がない場所では地図は出せませんが、記録は「ピン一覧」から続けられます。</p>
+    <button id="btnOpenListFromFallback" class="btn-primary btn-wide">ピン一覧を開く</button>
+    <button id="btnRetryMap" class="btn-secondary btn-wide">地図を再読み込み</button>
+  </div>
+
+  <!-- ピン追加時に中心を示す照準と確定バー -->
+  <div id="crosshair" hidden aria-hidden="true"></div>
+  <div id="placeBar" hidden>
+    <span>追加する場所に地図を合わせてください</span>
+    <div class="place-actions">
+      <button id="btnPlaceCancel" class="btn-secondary">やめる</button>
+      <button id="btnPlaceConfirm" class="btn-primary">ここに追加</button>
+    </div>
+  </div>
 
   <div id="mapControls">
     <button id="btnLocate" class="fab" title="現在地へ">📍</button>
@@ -60,6 +112,16 @@
 
   <button id="btnSyncNow" class="btn-sync-now" hidden>今すぐ同期</button>
 </section>
+
+<!-- ピン一覧・検索 -->
+<aside id="listPanel" class="panel panel-left" hidden>
+  <div class="panel-head">
+    <h2>ピン一覧 <span id="pinListCount" class="hint"></span></h2>
+    <button id="btnClosePinList" class="btn-close">×</button>
+  </div>
+  <input id="inpPinSearch" type="search" placeholder="名前・カテゴリで検索" autocomplete="off">
+  <div id="pinListBody"></div>
+</aside>
 
 <!-- ピン詳細パネル -->
 <aside id="pinPanel" class="panel" hidden>
@@ -71,9 +133,9 @@
 <dialog id="dlgPinForm">
   <form id="formPin" method="dialog">
     <h2 id="pinFormTitle">ピンを追加</h2>
-    <label>名前<input id="inpPinName" type="text" required maxlength="120"></label>
+    <label>名前<input id="inpPinName" type="text" required maxlength="120" placeholder="例: リバウエ 第3圃場"></label>
     <label>説明<textarea id="inpPinDescription" rows="3" maxlength="1000"></textarea></label>
-    <label>カテゴリ(任意)<input id="inpPinCategory" type="text" maxlength="60"></label>
+    <label>カテゴリ(任意)<input id="inpPinCategory" type="text" maxlength="60" placeholder="例: 圃場 / 育苗 / 倉庫"></label>
     <p class="hint">位置: <span id="pinFormLatLng"></span></p>
     <div class="dlg-actions">
       <button type="button" id="btnCancelPinForm" class="btn-secondary">キャンセル</button>
@@ -87,9 +149,17 @@
   <form id="formVisit" method="dialog">
     <h2>訪問を記録</h2>
     <p class="hint" id="visitFormWho"></p>
-    <label>メモ<textarea id="inpVisitNote" rows="4" maxlength="2000"></textarea></label>
-    <label>写真<input id="inpVisitPhotos" type="file" accept="image/*" capture="environment" multiple></label>
-    <div id="visitPhotoPreview"></div>
+    <label>メモ<textarea id="inpVisitNote" rows="4" maxlength="2000" placeholder="作業内容、気づいたことなど"></textarea></label>
+    <div class="photo-pick">
+      <label class="file-btn">📷 カメラで撮る
+        <input id="inpVisitCamera" type="file" accept="image/*" capture="environment" hidden>
+      </label>
+      <label class="file-btn">🖼 写真を選ぶ
+        <input id="inpVisitLibrary" type="file" accept="image/*" multiple hidden>
+      </label>
+      <span id="visitPhotoCount" class="hint"></span>
+    </div>
+    <div id="visitPhotoPreview" hidden></div>
     <div class="dlg-actions">
       <button type="button" id="btnCancelVisitForm" class="btn-secondary">キャンセル</button>
       <button type="submit" id="btnSaveVisitForm" class="btn-primary">記録する</button>
@@ -106,9 +176,50 @@
 <div id="toast" hidden></div>
 
 <script>
+  /* Service Worker。新しい版が主導権を取ったら一度だけ再読み込みして、
+     古いキャッシュのまま使い続ける状態(実際にこれで詰まった)を自動で解消する。 */
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+    var hadController = !!navigator.serviceWorker.controller;
+    var reloadedForSW = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!hadController || reloadedForSW) return;
+      reloadedForSW = true;
+      location.reload();
+    });
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('./sw.js').catch(function () {});
+    });
   }
+
+  /* 読み込みが12秒を超えたら、自力で立て直せる手段を見せる。
+     真っ白な「読み込み中」だけを見せ続けないための保険。 */
+  window.__fvmBooted = false;
+  setTimeout(function () {
+    if (window.__fvmBooted) return;
+    var help = document.getElementById('loadingHelp');
+    if (help) help.hidden = false;
+  }, 12000);
+
+  document.getElementById('btnReload').addEventListener('click', function () {
+    location.reload();
+  });
+  document.getElementById('btnHardReset').addEventListener('click', function () {
+    var done = function () { location.reload(); };
+    var jobs = [];
+    try {
+      if ('serviceWorker' in navigator) {
+        jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+          return Promise.all(regs.map(function (r) { return r.unregister(); }));
+        }));
+      }
+      if (window.caches) {
+        jobs.push(caches.keys().then(function (keys) {
+          return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+        }));
+      }
+    } catch (e) { /* 消せなくても再読み込みは試す */ }
+    Promise.all(jobs).then(done, done);
+  });
 </script>
 <script src="./config.js" onerror="console.error('docs/config.js が見つかりません。config.example.js をコピーして作成してください。')"></script>
 <script type="module" src="./app.js"></script>

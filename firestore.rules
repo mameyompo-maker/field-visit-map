@@ -30,10 +30,15 @@ service cloud.firestore {
       return who.uid == request.auth.uid && who.email.lower() == myEmail();
     }
 
-    // allowedUsers: 読み取りは許可された人だけ(自分が載っているか確認するため必要)。
+    // allowedUsers:
+    //   自分の行は「まだ許可されていない人」でも読めなければならない。
+    //   ここを isAllowed() だけにすると、未登録の人は自分の行を読んだ瞬間に
+    //   permission-denied になり、アプリ側が「許可/不許可」を判定できず
+    //   読み込み中のまま固まる(実際にその不具合を出した)。
+    //   読めるのは常に自分の1行だけなので、他人の登録状況は漏れない。
     // 書き込みはKazさんがFirebase Console経由で行う運用のため、クライアントからは禁止。
     match /allowedUsers/{email} {
-      allow read: if isAllowed();
+      allow read: if isAllowed() || (isSignedIn() && email == myEmail());
       allow write: if false;
     }
 

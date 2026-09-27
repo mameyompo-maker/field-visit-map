@@ -27,12 +27,15 @@ async function renderToJpeg(bitmap, maxDimension, quality) {
 export async function prepareUpload(file) {
   try {
     const bitmap = await createImageBitmap(file);
+    // close() すると仕様上 width/height が 0 になるので、先に控えてから閉じる。
+    const width = bitmap.width;
+    const height = bitmap.height;
     const [full, thumb] = await Promise.all([
       renderToJpeg(bitmap, 1600, 0.8),
       renderToJpeg(bitmap, 480, 0.7)
     ]);
     bitmap.close?.();
-    return { full: full || file, thumb, width: bitmap.width, height: bitmap.height };
+    return { full: full || file, thumb, width, height };
   } catch {
     return { full: file, thumb: null, width: null, height: null };
   }
