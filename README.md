@@ -12,6 +12,8 @@ Googleマップの「保存した場所」では足りない、写真・メモ�
   (Security Rulesが唯一の防御線)
 - オフライン対応: 電波が無い現場でもピン・メモ・写真の記録ができ、電波復帰時に自動同期する
   (詳細設計は `HANDOVER.md` 参照)
+- 書き出し: 記録を端末にダウンロードして他の道具へ持ち出せる。地図はKML(Google
+  マイマップにそのまま読み込める)、記録はCSV/Markdown/JSON、写真は実体ごとZIP
 - 実装方式: ビルド不要の素のHTML/JS(ESモジュール)。`git push` すればGitHub Pagesに即反映
   (`projects/jatlog_offline`・`projects/nutrition_tracker` と同じ運用)
 
@@ -28,8 +30,10 @@ docs/                … GitHub Pages配信元
   config.example.js  … config.js の雛形(config.js自体もリポジトリにコミットする。値は
                         公開前提の情報であり秘匿しない。jatlog_offlineのconfig.jsと同じ扱い)
   manifest.webmanifest, sw.js
-  lib/               … Firebase/地図/オフラインキュー等の共通ロジック
-  ui/                 … 画面部品(フォーム・パネル・ライトボックス)
+  lib/               … Firebase/地図/オフラインキュー/書き出し等の共通ロジック
+    export.js        … KML・CSV・Markdown・JSON・GeoJSONの生成とダウンロード
+    zip.js           … 無圧縮ZIPの書き出し(外部ライブラリを使わない理由は同ファイル冒頭)
+  ui/                 … 画面部品(フォーム・パネル・ライトボックス・書き出し画面)
 firestore.rules, storage.rules, firebase.json, firestore.indexes.json
 ```
 
