@@ -5,6 +5,12 @@
  * Advanced Markers(google.maps.marker.AdvancedMarkerElement)を使うため、
  * config.js の mapId が必須(Google Cloud ConsoleのMap管理から発行する)。
  *
+ * ★ 地図コンテナには必ず「幅と高さ」を与えること(styles.css の #map)。
+ *   Maps JS API はコンテナに position:relative をインラインで上書きするため、
+ *   position:fixed + inset:0 で大きさを作っていると、その指定が殺されて高さ0になる。
+ *   タイルは読み込まれているのに画面には何も出ない、という分かりにくい形で壊れる
+ *   (実際にこれで「地図が表示されない」を出した)。
+ *
  * 設定は firebase-init.js からではなく window から直接読む。firebase-init.js は
  * 先頭で Firebase SDK を await しているため、そちらを経由すると地図の読み込みが
  * SDKのダウンロード完了まで始まらず、初回表示が目に見えて遅くなる。
@@ -46,16 +52,29 @@ function loadSavedView() {
   return null;
 }
 
+function getPosition(options) {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) { resolve(null); return; }
+    navigator.geolocation.getCurrentPosition(
+      (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy }),
+      () => resolve(null),
+      options
+    );
+  });
+}
+
 /**
  * 地図を1つ作る。onPinClick(id) はマーカータップ時に呼ばれる。
  * 地図の空白部分をタップしてもピン追加フォームは開かない
  * (移動のたびにダイアログが出る誤操作が多すぎるため。追加は＋ボタンから行う)。
  */
-export async function createMapController(container, { onPinClick } = {}) {
+export async function createMapController(container, { onPinClick, onIdle } = {}) {
   const maps = await loadMapsApi();
   const { Map: GoogleMap } = await maps.importLibrary('maps');
   const { AdvancedMarkerElement, PinElement } = await maps.importLibrary('marker');
 
+  // 現在地が取れるまでの「とりあえずの表示」。真っ白な地図を見せないためのもので、
+  // 起動時は下の locate() で現在地へ寄せ直す。
   const saved = loadSavedView();
   const map = new GoogleMap(container, {
     center: saved ? { lat: saved.lat, lng: saved.lng } : (cfg.defaultCenter || { lat: 0, lng: 0 }),
@@ -64,29 +83,57 @@ export async function createMapController(container, { onPinClick } = {}) {
     mapTypeControl: false,
     streetViewControl: false,
     fullscreenControl: false,
-    clickableIcons: false,      // Googleの店舗アイコン等の吹き出しは巡回記録には邪魔
-    gestureHandling: 'greedy'   // 片手操作で1本指スクロールできるようにする
+    zoomControl: false,          // スマホはピンチで操作する(Google マップと同じ)
+    clickableIcons: false,       // Googleの店舗アイコンの吹き出しは巡回記録には邪魔
+    gestureHandling: 'greedy'    // 片手で1本指スクロールできるようにする
   });
 
-  // 次に開いたとき同じ場所から始められるようにする(毎回リバウエ近郊から
-  // 探し直すのは現場では手間なので)。
+  // 次に開いたとき同じ場所から始められるようにする。
   map.addListener('idle', () => {
     const c = map.getCenter();
     if (!c) return;
     try {
       localStorage.setItem(VIEW_KEY, JSON.stringify({ lat: c.lat(), lng: c.lng(), zoom: map.getZoom() }));
     } catch { /* 保存できなくても動作には影響しない */ }
+    if (onIdle) onIdle();
   });
 
+  // ---------------------------------------------------------- 現在地の青い点
+
+  let myDot = null;
+  function showMyLocation(pos) {
+    if (!myDot) {
+      const dot = document.createElement('div');
+      dot.className = 'my-location-dot';
+      myDot = new AdvancedMarkerElement({ map, position: pos, content: dot, zIndex: 1 });
+    } else {
+      myDot.position = pos;
+      myDot.map = map;
+    }
+  }
+
+  /** 現在地を取得して地図を寄せる。成否を Promise<boolean> で返す。 */
+  async function locate({ pan = true, zoom = 16 } = {}) {
+    const pos = await getPosition({ enableHighAccuracy: true, maximumAge: 30000, timeout: 10000 });
+    if (!pos) return false;
+    showMyLocation({ lat: pos.lat, lng: pos.lng });
+    if (pan) {
+      map.panTo({ lat: pos.lat, lng: pos.lng });
+      if (zoom) map.setZoom(zoom);
+    }
+    return true;
+  }
+
+  // ---------------------------------------------------------- ピンの描画
+
   const markerById = new Map();
+  const renderedState = new Map();   // 見た目に関係する値だけ控え、変化が無ければ作り直さない
 
   function pinContent(pin) {
-    // 未同期のピンは色を変えて一目で分かるようにする(同期ステータスの可視化)。
-    const bg = pin._pendingWrite ? '#f59e0b' : '#2563eb';
-    // 名前の先頭1文字をマーカーに出すと、拡大しなくても見分けがつく。
+    const bg = pin._pendingWrite ? '#f59e0b' : '#ea4335';
     const glyph = (pin.name || '').trim().charAt(0) || '';
     return new PinElement({
-      background: bg, borderColor: '#1e3a8a', glyphColor: '#ffffff', glyph, scale: 1.1
+      background: bg, borderColor: '#b31412', glyphColor: '#ffffff', glyph, scale: 1
     }).element;
   }
 
@@ -94,6 +141,7 @@ export async function createMapController(container, { onPinClick } = {}) {
     const seen = new Set();
     pins.forEach((pin) => {
       seen.add(pin.id);
+      const state = `${pin.name || ''}|${pin._pendingWrite ? 1 : 0}`;
       let marker = markerById.get(pin.id);
       const position = { lat: pin.lat, lng: pin.lng };
       if (!marker) {
@@ -105,14 +153,19 @@ export async function createMapController(container, { onPinClick } = {}) {
         // addListener('click', …) はv3.66以降非推奨。標準の addEventListener + 'gmp-click' を使う。
         if (onPinClick) marker.addEventListener('gmp-click', () => onPinClick(pin.id));
         markerById.set(pin.id, marker);
+        renderedState.set(pin.id, state);
       } else {
         marker.position = position;
-        marker.title = pin.name || '';
-        marker.content = pinContent(pin);
+        // 中身の作り直しは見た目が変わったときだけ。毎回作ると件数ぶん無駄に重くなる。
+        if (renderedState.get(pin.id) !== state) {
+          marker.title = pin.name || '';
+          marker.content = pinContent(pin);
+          renderedState.set(pin.id, state);
+        }
       }
     });
     for (const [id, marker] of markerById.entries()) {
-      if (!seen.has(id)) { marker.map = null; markerById.delete(id); }
+      if (!seen.has(id)) { marker.map = null; markerById.delete(id); renderedState.delete(id); }
     }
   }
 
@@ -123,23 +176,18 @@ export async function createMapController(container, { onPinClick } = {}) {
 
   function getCenter() {
     const c = map.getCenter();
-    return { lat: c.lat(), lng: c.lng() };
+    // 地図の初期化に失敗している場合(APIキーのリファラー制限違反など)は
+    // getCenter() が undefined を返す。ここで落とすとピン追加ごと巻き込むので既定値に倒す。
+    return c ? { lat: c.lat(), lng: c.lng() } : (cfg.defaultCenter || { lat: 0, lng: 0 });
   }
 
-  /** 現在地へ移動する。成否を Promise<boolean> で返す(呼び出し側が通知を出せるように)。 */
-  function tryUseCurrentLocation() {
-    return new Promise((resolve) => {
-      if (!navigator.geolocation) { resolve(false); return; }
-      navigator.geolocation.getCurrentPosition(
-        (p) => { centerOn({ lat: p.coords.latitude, lng: p.coords.longitude }, 16); resolve(true); },
-        () => resolve(false),
-        { enableHighAccuracy: true, maximumAge: 30000, timeout: 8000 }
-      );
-    });
+  /* タイルが1枚も描かれないまま時間が過ぎたら、設定側の問題(APIキーの制限、
+   * Map IDの不備など)を疑う。コンソールにしか出ないと気づけないので呼び出し側へ返す。 */
+  function whenTilesFail(ms, onFail) {
+    let loaded = false;
+    const once = map.addListener('tilesloaded', () => { loaded = true; once.remove(); });
+    setTimeout(() => { if (!loaded) onFail(); }, ms);
   }
 
-  // 初回起動(保存された表示位置が無い)のときだけ、黙って現在地に寄せる。
-  if (!saved) tryUseCurrentLocation();
-
-  return { map, render, centerOn, getCenter, tryUseCurrentLocation, restoredView: !!saved };
+  return { map, render, centerOn, getCenter, locate, showMyLocation, whenTilesFail };
 }

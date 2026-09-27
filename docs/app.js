@@ -2,9 +2,8 @@
  *
  * 起動の順番が重要:
  *   地図(Google Maps API)はオンラインでないと読めない。一方、記録そのものは
- *   オフラインでもできなければならない。そこで「データの購読・同期・一覧」を先に
+ *   オフラインでもできなければならない。そこで「データの購読・同期・検索」を先に
  *   立ち上げ、地図は最後に、失敗しても他を巻き込まない形で読み込む。
- *   以前は地図を最初に await していたため、圏外だと同期も一覧も動かなかった。
  */
 import { onAuthChange, signInWithGoogle, signOutUser, currentUser, recheckAllowed } from './lib/auth.js';
 import { listenPins, createPin } from './lib/pins.js';
@@ -13,7 +12,7 @@ import { mountStatusBar } from './lib/sync-status.js';
 import { startAutoSync } from './lib/offline-queue.js';
 import { openPinPanel, refreshPinData, closePinPanel, setPinPanelHandlers } from './ui/pin-panel.js';
 import { openPinForm } from './ui/pin-form.js';
-import { mountPinList, setPins, openPinList, closePinList, togglePinList } from './ui/pin-list.js';
+import { mountPinList, setPins, openPinList, closePinList } from './ui/pin-list.js';
 import { toast, errorToast } from './ui/toast.js';
 
 const $ = (id) => document.getElementById(id);
@@ -41,10 +40,16 @@ async function startMap() {
     mapController = await createMapController($('map'), {
       onPinClick: (pinId) => {
         const pin = latestPins.find((p) => p.id === pinId);
-        if (pin) openPinPanel(pin);
+        if (pin) { closePinList(); openPinPanel(pin); }
       }
     });
     mapController.render(latestPins);
+    mapController.whenTilesFail(12000, () => {
+      toast('地図を表示できていません。通信状況か地図の設定を確認してください', 6000);
+    });
+    // 起動時は現在地から始める(Google マップと同じ振る舞い)。
+    const ok = await mapController.locate();
+    if (!ok) toast('現在地を取得できませんでした。位置情報の許可を確認してください');
   } catch (err) {
     mapController = null;
     $('mapFallback').hidden = false;
@@ -58,7 +63,8 @@ function setPlacing(on) {
   $('crosshair').hidden = !on;
   $('placeBar').hidden = !on;
   $('mapControls').hidden = on;
-  if (on) { closePinPanel(); closePinList(); }
+  $('searchBar').hidden = on;
+  if (on) { closePinPanel(); closePinList(); closeAccountMenu(); }
 }
 
 function currentPosition() {
@@ -76,13 +82,13 @@ async function addPinAt(latLng) {
   const result = await openPinForm(latLng);
   if (!result) return;
   try {
-    // 追加したらそのまま訪問を記録する流れが多いので、詳細パネルを開いてやる。
+    // 追加したらそのまま訪問を記録する流れが多いので、詳細シートを開いてやる。
     // ただしピンが一覧に現れるのは onSnapshot が返ってから(同じ処理の中ではない)
     // なので、IDだけ控えて購読側で開く。
     pendingOpenPinId = createPin({ ...result, ...latLng });
-    toast('ピンを追加しました');
+    toast('場所を追加しました');
   } catch (err) {
-    errorToast('ピンを追加できませんでした', err);
+    errorToast('場所を追加できませんでした', err);
   }
 }
 
@@ -94,6 +100,10 @@ async function beginAddPin() {
   if (!pos) { toast('現在地を取得できませんでした。地図が使える場所で追加してください'); return; }
   addPinAt(pos);
 }
+
+// ------------------------------------------------------------------ アカウントメニュー
+
+function closeAccountMenu() { $('accountMenu').hidden = true; }
 
 // ------------------------------------------------------------------ 起動
 
@@ -109,15 +119,29 @@ function wireMapScreen() {
 
   $('btnLocate').addEventListener('click', async () => {
     if (!mapController) { toast('地図を表示できていません'); return; }
-    const ok = await mapController.tryUseCurrentLocation();
+    const ok = await mapController.locate();
     if (!ok) toast('現在地を取得できませんでした(位置情報の許可を確認してください)');
   });
 
-  $('btnList').addEventListener('click', togglePinList);
+  $('btnAccount').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const menu = $('accountMenu');
+    menu.hidden = !menu.hidden;
+    if (!menu.hidden) closePinList();
+  });
+
   $('btnOpenListFromFallback').addEventListener('click', openPinList);
   $('btnRetryMap').addEventListener('click', () => {
     toast('地図を読み込んでいます…');
     startMap();
+  });
+
+  // 地図やほかの場所をタップしたら、開いているメニュー・検索結果を閉じる。
+  document.addEventListener('click', (e) => {
+    if (!$('accountMenu').hidden && !$('accountMenu').contains(e.target)) closeAccountMenu();
+    if (!$('searchPanel').hidden
+      && !$('searchPanel').contains(e.target)
+      && !$('searchBar').contains(e.target)) closePinList();
   });
 
   // 圏内に戻ったら地図を自動で読み直す(利用者が気づいて押す必要がないように)。
@@ -126,6 +150,7 @@ function wireMapScreen() {
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (placing) { setPlacing(false); return; }
+    closeAccountMenu();
     closePinList();
     closePinPanel();
   });
@@ -135,11 +160,15 @@ function startApp() {
   if (started) return;
   started = true;
 
-  mountStatusBar($('syncBar'), $('btnSyncNow'));
+  mountStatusBar($('syncBar'), null);
   startAutoSync();
 
   mountPinList({
-    onSelect: (pin) => { closePinList(); focusPin(pin); }
+    onSelect: (pin) => {
+      closePinList();
+      $('inpSearch').blur();
+      focusPin(pin);
+    }
   });
   setPinPanelHandlers({
     onCenter: (pin) => {
@@ -191,9 +220,16 @@ onAuthChange(({ user, state, error }) => {
   }
 
   $('userName').textContent = user.displayName;
+  $('userEmail').textContent = user.email;
   const photo = $('userPhoto');
-  photo.hidden = !user.photoURL;
-  if (user.photoURL) photo.src = user.photoURL;
+  if (user.photoURL) {
+    photo.src = user.photoURL;
+    photo.hidden = false;
+    $('userInitial').textContent = '';
+  } else {
+    photo.hidden = true;
+    $('userInitial').textContent = (user.displayName || user.email || '?').trim().charAt(0).toUpperCase();
+  }
   showScreen('screenMap');
   startApp();
 });

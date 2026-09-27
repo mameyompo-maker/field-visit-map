@@ -14,8 +14,8 @@
  *   保存の成否はステータスバーの未同期件数で見せる方針にしてある。
  */
 import {
-  db, storage, doc, collection, setDoc, updateDoc, onSnapshot, serverTimestamp,
-  increment, ref, uploadBytesResumable, getDownloadURL
+  db, doc, collection, setDoc, updateDoc, onSnapshot, serverTimestamp,
+  increment, getStorageApi
 } from './firebase-init.js';
 import { currentUser } from './auth.js';
 import { prepareUpload } from './image.js';
@@ -209,6 +209,8 @@ export function listenPhotos(pinId, visitId, onChange) {
 // ---------------------------------------------- 写真キューの実処理(offline-queue.js から呼ばれる)
 
 registerProcessor(async (item) => {
+  // Storage SDKはここで初めて必要になる(写真を実際に送る瞬間)。
+  const { storage, ref, uploadBytesResumable, getDownloadURL } = await getStorageApi();
   // uploadBytesResumable の UploadTask は thenable(Promise<UploadTaskSnapshot>を実装)
   // なので await できる。resumable にしているのは、電波が弱い現場での中断・再開に強いため。
   const fullRef = ref(storage, item.storagePath);

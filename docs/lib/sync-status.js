@@ -58,14 +58,14 @@ export function mountStatusBar(barEl, buttonEl) {
     if (s.offline) {
       barEl.hidden = false;
       barEl.textContent = total
-        ? `オフラインです(保存待ち ${total} 件)`
-        : 'オフラインです';
+        ? `オフライン ・ 保存待ち ${total} 件`
+        : 'オフライン ・ 記録はこの端末に保存されます';
     } else if (s.flushing) {
       barEl.hidden = false;
       barEl.textContent = '同期中…';
     } else if (total) {
       barEl.hidden = false;
-      barEl.textContent = `同期待ち ${total} 件`;
+      barEl.textContent = `同期待ち ${total} 件(タップで送信)`;
     } else if (s.photoErrorCount) {
       barEl.hidden = false;
       barEl.textContent = `送信できなかった写真 ${s.photoErrorCount} 件(タップで再試行)`;
