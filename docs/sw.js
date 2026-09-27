@@ -9,7 +9,7 @@
  * 上げ忘れると、既に開いている端末が古い版のキャッシュを使い続ける。
  */
 
-const CACHE = 'field-visit-map-v1';
+const CACHE = 'field-visit-map-v2';
 
 const FILES = [
   './',
