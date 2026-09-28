@@ -91,6 +91,11 @@ button { font-family: inherit; color: inherit; }
 .btn-secondary { background: #fff; border: 1px solid var(--line); color: var(--text); }
 .btn-secondary:hover { background: var(--bg); }
 .btn-wide { display: block; width: 100%; }
+/* 押せないボタンは見た目でも押せないと分かるようにする。写真の位置が信用できない
+ * ときは「どれかを選ぶまで決定できない」作りにしてあるので、ここが効いてくる。
+ * 色が変わらないまま反応しないボタンは、壊れていると受け取られる。 */
+.btn-primary:disabled, .btn-secondary:disabled { opacity: .45; cursor: default; }
+.btn-primary:disabled:hover { background: var(--blue); }
 
 /* ------------------------------------------------------------ 検索バー(Google マップ風) */
 
@@ -392,7 +397,15 @@ label.fab { display: grid; place-items: center; cursor: pointer; }
 
 #photoSheet h2 { font-size: 1.1rem; margin: 0 0 10px; font-weight: 500; }
 #photoSheet { max-height: 66vh; }   /* 上半分に地図とピンを残す */
-.sheet-actions { display: flex; gap: 10px; margin-top: 14px; }
+/* 決定・キャンセルはシートの下端に貼り付けておく。写真の説明が長くなると、
+ * シートの中をスクロールしないとボタンに届かなくなる(実際に届かなくなった)。
+ * 上端に薄い影を出して、下にまだ内容があることも分かるようにする。 */
+.sheet-actions {
+  display: flex; gap: 10px; margin-top: 14px;
+  position: sticky; bottom: 0; background: #fff;
+  padding: 10px 0 2px;
+  box-shadow: 0 -10px 12px -10px rgba(60, 64, 67, .35);
+}
 .sheet-actions button { flex: 1 1 0; }
 
 #photoImportChoices { margin: 14px 0 4px; }
@@ -441,3 +454,16 @@ dialog button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2p
 @keyframes syncPulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 
 #btnSyncNow:disabled { opacity: .5; cursor: default; }
+
+/* ------------------------------------------- 位置情報が無い理由(写真から記録する) */
+
+/* 理由の説明は長い。出しっぱなしだと候補の選択肢が画面の外へ押し出されるので、
+ * 短い一文だけを常時見せて、詳しい理由は折りたたんでおく。 */
+#photoImportWarn details { margin-top: 6px; }
+#photoImportWarn summary {
+  cursor: pointer; color: var(--blue); font-weight: 500;
+  /* 指で押す的が小さいと開けない。行の高さで稼ぐ。 */
+  padding: 4px 0;
+}
+#photoImportWarn summary::marker { color: var(--blue); }
+#photoImportWarn .why { margin: 4px 0 0; color: var(--muted); }

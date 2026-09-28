@@ -16,11 +16,17 @@
  * 位置が読めない写真もある(GPSが切ってある、SNS経由で削除された、HEICなど)。
  * その場合は黙って諦めず、「地図で場所を選ぶ」か「登録済みの場所から選ぶ」に倒す。
  */
-import { readGroupMeta } from '../lib/exif.js';
+import { readGroupMeta, isUndisplayable } from '../lib/exif.js';
 import { distanceMeters, fmtDistance } from '../lib/geo.js';
 import { pinActivityTime } from '../lib/pins.js';
 
 const $ = (id) => document.getElementById(id);
+
+/* 撮った直後の写真なら、いまの現在地をそのまま撮影地点としてよい。歩いて移動する
+ * 速さを考えると、30分あれば数km離れうるので、ここを境目にする。
+ * 境目より新しければ「撮影地点」と言い切り、古ければ「別の場所のはず」と警告する。
+ * 誤った場所に記録が付くのは、位置が分からないより悪い。 */
+const FRESH_MINUTES = 30;
 
 /* スマホのGPS誤差はふつう5〜20m、樹冠の下ではもっと大きい。圃場そのものの
  * 広さもあるので、300mまでを「同じ場所かもしれない」として候補に出す。 */
@@ -140,11 +146,115 @@ const SOURCE_LABEL = {
   manual: '指定した位置'
 };
 
+/**
+ * この位置を撮影地点として信用してよいか。
+ * 写真のGPSそのもの、手で指した位置、そして「撮った直後なので現在地＝撮影地点」の
+ * 3つだけを信用する。古い写真に現在地を当てたものは信用しない(別の場所のはず)。
+ */
+function isTrusted() {
+  const { source, fresh } = session;
+  return source === 'exif' || source === 'manual' || (source === 'current' && fresh);
+}
+
+/** 撮影(またはファイル作成)からの経過分。分からなければ null。 */
+function minutesSince(ms) {
+  if (!ms) return null;
+  const mins = (Date.now() - ms) / 60000;
+  // 端末の時計がずれていて未来になることがある。その場合も「さっき」として扱う。
+  return mins < -60 ? null : Math.max(0, mins);
+}
+
+function isFresh(ms) {
+  const mins = minutesSince(ms);
+  return mins !== null && mins <= FRESH_MINUTES;
+}
+
+const FORMAT_NAME = { heic: 'HEIC', video: '動画', avif: 'AVIF', png: 'PNG', webp: 'WebP' };
+
+/** ブラウザが表示できない形式を渡されたときの断り。写真は残るが画面には出せない。 */
+function undisplayableNote(format) {
+  return `${FORMAT_NAME[format] || 'この'}形式のため、写真そのものは画面に出せません`
+    + '(カメラ設定を「互換性優先(JPEG)」にしてください)。';
+}
+
+/**
+ * 位置情報が読めなかった理由。折りたたみの中に入れる長い説明。
+ * 黙って現在地に差し替えると不具合に見えるので、理由は必ず読めるようにしておく。
+ * EXIFごと無いのか、EXIFはあるのにGPSだけ無いのかで原因が違う。
+ */
+function whyNoGps(meta) {
+  const undisp = meta.formats.filter(isUndisplayable)[0];
+  if (!meta.hasExif && undisp) {
+    return `${FORMAT_NAME[undisp] || 'この'}形式で、撮影情報そのものを読み取れませんでした。`;
+  }
+  if (!meta.hasExif) {
+    return '撮影情報(EXIF)ごと入っていません。加工アプリやSNSを通した写真、'
+      + 'スクリーンショットではこうなります。';
+  }
+  /* ここがいちばん多い。撮影日時は読めるのに位置だけ無い状態。
+   * Android 10以降とiOSは、ブラウザに写真を渡すときGPSだけを取り除く。
+   * アプリ側では回避できないので、正直に仕様だと言う。 */
+  return '撮影日時は読めているので、写真は壊れていません。スマホから写真を選ぶと、'
+    + 'iPhone・AndroidのどちらもOSが位置情報だけを取り除いてブラウザに渡します'
+    + '(Android 10以降の仕様で、アプリ側では回避できません)。'
+    + '確実なのは、その場で撮ってすぐ登録する方法です。'
+    + 'パソコンからアップロードすれば位置情報は残ります。';
+}
+
+/**
+ * 警告欄を組み立てる。短い一文を常時見せ、長い理由は折りたたむ。
+ * 理由を出しっぱなしにすると、390px幅では候補の選択肢が画面の外へ押し出される。
+ * @param {object} meta  readGroupMeta の結果
+ * @param {boolean} gpsMissing  位置情報が読めなかったか
+ */
+function renderWarn(meta, gpsMissing) {
+  const el = $('photoImportWarn');
+  const lead = [];
+  const undisp = meta.formats.filter(isUndisplayable)[0];
+  if (undisp) lead.push(undisplayableNote(undisp));
+  if (gpsMissing) lead.push(`写真に位置情報がありません。${whatWeDid(meta)}`);
+
+  if (!lead.length) { el.hidden = true; el.textContent = ''; return; }
+  el.hidden = false;
+  el.textContent = lead.join(' ');
+  if (!gpsMissing) return;
+
+  // 差し込むのは固定の文言と整形済みの日付だけなので、innerHTMLでも入力は混ざらない。
+  const d = document.createElement('details');
+  d.innerHTML = '<summary>なぜ位置情報が無いのか</summary><p class="why"></p>';
+  d.querySelector('.why').textContent = whyNoGps(meta);
+  el.appendChild(d);
+}
+
+/** 位置をどう埋めたか、これから何をすればよいかを言う。 */
+function whatWeDid(meta) {
+  if (!session.latLng) {
+    return '現在地も取得できませんでした。地図を押して、写真を撮った場所を指定してください。';
+  }
+  if (session.source === 'center') {
+    return '地図の中心を仮に置いています。地図を押すか、青いピンを動かして直してください。';
+  }
+  const when = meta.takenAt || meta.fileTime;
+  const mins = minutesSince(when);
+  if (session.fresh) {
+    const ago = mins !== null && mins >= 1 ? `${Math.round(mins)}分前` : 'たったいま';
+    return `${ago}の写真なので、いまの現在地を撮影地点として使います。`;
+  }
+  if (when) {
+    // 古い写真に現在地を当てるのは危険。候補も選ばずに出してあるので、必ず選ばせる。
+    return `この写真は ${fmtDateTime(when)} のものです。いまの現在地とは別の場所のはずなので、`
+      + '地図を押して撮影地点を指定するか、下から場所を選んでください。';
+  }
+  return '現在地を仮に置いています。違う場合は地図を押すか、青いピンを動かしてください。';
+}
+
 function renderWhere() {
-  const { latLng, takenAt, source } = session;
+  const { latLng, takenAt, source, fresh } = session;
   const parts = [];
   if (latLng) {
-    const label = SOURCE_LABEL[source] || '位置';
+    const label = (source === 'current' && fresh)
+      ? '撮影地点(いまの現在地)'
+      : (SOURCE_LABEL[source] || '位置');
     parts.push(`${label}: ${latLng.lat.toFixed(6)}, ${latLng.lng.toFixed(6)}`);
   }
   if (takenAt) parts.push(`撮影日時: ${fmtDateTime(takenAt)}`);
@@ -168,6 +278,8 @@ function renderChoices() {
   head.className = 'hint';
   if (!pins.length) head.textContent = 'まだ登録された場所がありません。';
   else if (!latLng) head.textContent = '登録済みの場所から選ぶ:';
+  // 位置が信用できないときに「ここですか?」と訊くと、頷くだけで間違いが確定する。
+  else if (hasNear && !isTrusted()) head.textContent = '仮の位置の近くにある場所です。どこで撮ったか選んでください:';
   else if (hasNear) head.textContent = 'この近くの場所です。ここですか?';
   else if (rows.length) head.textContent = `${NEAR_METERS} m以内に登録された場所はありません。いちばん近いのは:`;
   else head.textContent = 'この近くに登録された場所はありません。新しい場所として登録できます。';
@@ -175,6 +287,10 @@ function renderChoices() {
 
   const keep = previous
     && (previous === NEW_PLACE || rows.some((c) => c.pin.id === previous));
+  /* 位置が信用できないとき(古い写真に現在地を当てただけ)は、何も選ばずに出す。
+   * 先に選んでおくと、そのまま押して間違った場所に記録が付いてしまう。
+   * 選ばなければ決定ボタンは押せないので、必ず一度は目で確かめることになる。 */
+  const trusted = isTrusted();
 
   rows.forEach((c, i) => {
     const last = pinActivityTime(c.pin);
@@ -187,19 +303,18 @@ function renderChoices() {
       value: c.pin.id,
       name: c.pin.name || '(名前なし)',
       sub,
-      checked: keep ? previous === c.pin.id : (hasNear && i === 0)
+      checked: keep ? previous === c.pin.id : (trusted && hasNear && i === 0)
     }));
   });
 
-  const fromExif = session.source === 'exif';
   choices.appendChild(choiceRow({
     value: NEW_PLACE,
     name: !latLng ? '地図で場所を選ぶ'
-      : (fromExif ? 'ここを新しい場所として登録する' : 'この位置に新しい場所を登録する'),
+      : (trusted ? 'ここを新しい場所として登録する' : 'この位置に新しい場所を登録する'),
     sub: !latLng ? '地図を押して、写真を撮った場所を指定します'
-      : (fromExif ? '写真の撮影地点に新しいピンを立てます'
+      : (trusted ? 'いまの撮影地点に新しいピンを立てます'
         : '地図の青いピンの位置に立てます。地図を押すかピンを動かせば直せます'),
-    checked: keep ? previous === NEW_PLACE : !hasNear
+    checked: keep ? previous === NEW_PLACE : (trusted && !hasNear)
   }));
 
   updateButton();
@@ -240,10 +355,15 @@ export function openPhotoImport(files, pins, handlers = {}) {
     const confirmBtn = $('btnConfirmPhotoImport');
     const cancelBtn = $('btnCancelPhotoImport');
 
-    session = { files, pins, latLng: null, takenAt: null, source: null, rows: [], handlers };
+    session = {
+      files, pins, latLng: null, takenAt: null, source: null, rows: [], handlers,
+      fresh: false   // 撮った直後の写真か(現在地を撮影地点として信用してよいか)
+    };
 
     renderPreview(files);
     $('photoImportWhere').textContent = '写真を調べています…';
+    // 前回の折りたたみが残らないよう中身ごと消す(hiddenだけでは残る)。
+    $('photoImportWarn').textContent = '';
     $('photoImportWarn').hidden = true;
     choices.innerHTML = '';
     confirmBtn.disabled = true;
@@ -302,16 +422,25 @@ export function openPhotoImport(files, pins, handlers = {}) {
         : null;
       session.takenAt = meta.takenAt;
 
+      // 撮った直後かどうかは、撮影日時が読めればそれで、読めなければファイルの
+      // 更新時刻で見る。OSがEXIFごと消しても更新時刻は必ず残るので、最後の砦になる。
+      session.fresh = isFresh(meta.takenAt || meta.fileTime);
+
       if (session.latLng) {
         session.source = 'exif';
         renderWhere();
         // ここで地図が撮影地点へ動き、ピンが立つ。
         if (handlers.onLocated) handlers.onLocated(session.latLng);
+        // 場所は読めたが写真そのものは表示できない形式(HEIC)は、ここで断っておく。
+        renderWarn(meta, false);
       } else {
         /* 写真に位置が無いとき、座標を出さずに「地図で選んでください」とだけ言うのは
-         * 不親切。撮った直後にその場で上げることが多いので、まず現在地を仮に置く。
+         * 不親切。撮った直後にその場で上げることが多いので、まず現在地を置く。
          * 現在地が取れない(許可していない・屋内など)ときは地図の中心を置く。
-         * どちらも「仮の位置」と断り、地図を押せば直せることを添える。 */
+         *
+         * ここで大事なのは「なぜ無いのか」を必ず言うこと。スマホから選んだ写真は
+         * OSが位置情報を取り除いて渡すので、写真に位置が入っていても読めない。
+         * 黙って現在地を置くと、アプリの不具合だと思わせてしまう。 */
         $('photoImportWhere').textContent = '写真に位置情報がありません。現在地を調べています…';
         let fallback = null;
         try {
@@ -325,14 +454,7 @@ export function openPhotoImport(files, pins, handlers = {}) {
           if (handlers.onLocated) handlers.onLocated(session.latLng);
         }
         renderWhere();
-        $('photoImportWarn').hidden = false;
-        $('photoImportWarn').textContent = session.latLng
-          ? '写真に位置情報がありませんでした(カメラの位置情報が切ってあるか、'
-            + '送信の途中で削除された可能性があります)。'
-            + (session.source === 'current' ? '現在地' : '地図の中心')
-            + 'を仮に置いています。違う場合は地図を押すか、青いピンを動かしてください。'
-          : '位置情報が読み取れず、現在地も取得できませんでした。'
-            + '地図を押して、写真を撮った場所を指定してください。';
+        renderWarn(meta, true);
       }
 
       renderChoices();
