@@ -13,6 +13,7 @@ import { startAutoSync } from './lib/offline-queue.js';
 import { openPinPanel, refreshPinData, closePinPanel, setPinPanelHandlers } from './ui/pin-panel.js';
 import { openPinForm } from './ui/pin-form.js';
 import { openVisitForm } from './ui/visit-form.js';
+import { mountSyncPanel } from './ui/sync-panel.js';
 import {
   openPhotoImport, isPhotoImportOpen, setPhotoLocation, closePhotoImport
 } from './ui/photo-import.js';
@@ -167,6 +168,15 @@ async function startPhotoImport(files) {
   closePinList();
 
   const result = await openPhotoImport(files, latestPins, {
+    /* 写真に位置が無いときの仮置き。現在地 → 地図の中心 の順で試す。
+     * 座標が1つも出ないまま「地図で選んでください」とだけ言われても、
+     * どこを押せばいいのか分からないため。 */
+    getFallbackLocation: async () => {
+      const pos = await currentPosition();
+      if (pos) return { latLng: pos, source: 'current' };
+      if (mapController) return { latLng: mapController.getCenter(), source: 'center' };
+      return null;
+    },
     onLocated: (latLng) => {
       if (!mapController) return;
       mapController.centerOn(latLng, 17);
@@ -283,6 +293,7 @@ function startApp() {
   started = true;
 
   mountStatusBar($('syncBar'), null);
+  mountSyncPanel();
   startAutoSync();
 
   mountPinList({

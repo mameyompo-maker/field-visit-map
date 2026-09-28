@@ -121,9 +121,8 @@ export function isPhotoImportOpen() {
 export function setPhotoLocation(latLng) {
   if (!session) return;
   session.latLng = latLng;
-  session.adjusted = true;
+  session.source = 'manual';
   renderWhere();
-  $('photoImportWarn').hidden = true;
   renderChoices();
 }
 
@@ -134,11 +133,19 @@ export function closePhotoImport() {
 
 // ---------------------------------------------------------------- 描画
 
+const SOURCE_LABEL = {
+  exif: '撮影地点',
+  current: '仮の位置(現在地)',
+  center: '仮の位置(地図の中心)',
+  manual: '指定した位置'
+};
+
 function renderWhere() {
-  const { latLng, takenAt, adjusted } = session;
+  const { latLng, takenAt, source } = session;
   const parts = [];
   if (latLng) {
-    parts.push(`${adjusted ? '指定した位置' : '撮影地点'}: ${latLng.lat.toFixed(6)}, ${latLng.lng.toFixed(6)}`);
+    const label = SOURCE_LABEL[source] || '位置';
+    parts.push(`${label}: ${latLng.lat.toFixed(6)}, ${latLng.lng.toFixed(6)}`);
   }
   if (takenAt) parts.push(`撮影日時: ${fmtDateTime(takenAt)}`);
   $('photoImportWhere').textContent = parts.length
@@ -184,12 +191,14 @@ function renderChoices() {
     }));
   });
 
+  const fromExif = session.source === 'exif';
   choices.appendChild(choiceRow({
     value: NEW_PLACE,
-    name: latLng ? 'ここを新しい場所として登録する' : '地図で場所を選ぶ',
-    sub: latLng
-      ? '写真の撮影地点に新しいピンを立てます'
-      : '地図を押して、写真を撮った場所を指定します',
+    name: !latLng ? '地図で場所を選ぶ'
+      : (fromExif ? 'ここを新しい場所として登録する' : 'この位置に新しい場所を登録する'),
+    sub: !latLng ? '地図を押して、写真を撮った場所を指定します'
+      : (fromExif ? '写真の撮影地点に新しいピンを立てます'
+        : '地図の青いピンの位置に立てます。地図を押すかピンを動かせば直せます'),
     checked: keep ? previous === NEW_PLACE : !hasNear
   }));
 
@@ -231,7 +240,7 @@ export function openPhotoImport(files, pins, handlers = {}) {
     const confirmBtn = $('btnConfirmPhotoImport');
     const cancelBtn = $('btnCancelPhotoImport');
 
-    session = { files, pins, latLng: null, takenAt: null, adjusted: false, rows: [], handlers };
+    session = { files, pins, latLng: null, takenAt: null, source: null, rows: [], handlers };
 
     renderPreview(files);
     $('photoImportWhere').textContent = '写真を調べています…';
@@ -293,15 +302,37 @@ export function openPhotoImport(files, pins, handlers = {}) {
         : null;
       session.takenAt = meta.takenAt;
 
-      renderWhere();
-      if (!session.latLng) {
-        $('photoImportWarn').hidden = false;
-        $('photoImportWarn').textContent =
-          '位置情報が読み取れませんでした(カメラの位置情報が切ってあるか、'
-          + '送信の途中で削除された可能性があります)。場所を選んでください。';
-      } else if (handlers.onLocated) {
+      if (session.latLng) {
+        session.source = 'exif';
+        renderWhere();
         // ここで地図が撮影地点へ動き、ピンが立つ。
-        handlers.onLocated(session.latLng);
+        if (handlers.onLocated) handlers.onLocated(session.latLng);
+      } else {
+        /* 写真に位置が無いとき、座標を出さずに「地図で選んでください」とだけ言うのは
+         * 不親切。撮った直後にその場で上げることが多いので、まず現在地を仮に置く。
+         * 現在地が取れない(許可していない・屋内など)ときは地図の中心を置く。
+         * どちらも「仮の位置」と断り、地図を押せば直せることを添える。 */
+        $('photoImportWhere').textContent = '写真に位置情報がありません。現在地を調べています…';
+        let fallback = null;
+        try {
+          fallback = handlers.getFallbackLocation ? await handlers.getFallbackLocation() : null;
+        } catch { fallback = null; }
+        if (!session) return;
+
+        if (fallback && fallback.latLng) {
+          session.latLng = fallback.latLng;
+          session.source = fallback.source || 'current';
+          if (handlers.onLocated) handlers.onLocated(session.latLng);
+        }
+        renderWhere();
+        $('photoImportWarn').hidden = false;
+        $('photoImportWarn').textContent = session.latLng
+          ? '写真に位置情報がありませんでした(カメラの位置情報が切ってあるか、'
+            + '送信の途中で削除された可能性があります)。'
+            + (session.source === 'current' ? '現在地' : '地図の中心')
+            + 'を仮に置いています。違う場合は地図を押すか、青いピンを動かしてください。'
+          : '位置情報が読み取れず、現在地も取得できませんでした。'
+            + '地図を押して、写真を撮った場所を指定してください。';
       }
 
       renderChoices();

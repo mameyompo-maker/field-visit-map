@@ -69,6 +69,9 @@
   <symbol id="i-photos" viewBox="0 0 24 24">
     <path fill-rule="evenodd" d="M8 2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm0 2v9.4l3.2-3.2 2.2 2.2 3.4-3.4L20 12.6V4zM2 6h2v14h14v2H4a2 2 0 0 1-2-2z"/>
   </symbol>
+  <symbol id="i-sync" viewBox="0 0 24 24">
+    <path d="M12 5V2L8 6l4 4V7a5 5 0 0 1 4.3 7.5l1.5 1.5A7 7 0 0 0 12 5zm0 12a5 5 0 0 1-4.3-7.5L6.2 8A7 7 0 0 0 12 19v3l4-4-4-4z"/>
+  </symbol>
   <symbol id="i-logout" viewBox="0 0 24 24">
     <path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5v-2H5V5h5zm6.2 4.8-1.4 1.4L16.6 11H9v2h7.6l-1.8 1.8 1.4 1.4L20.4 12z"/>
   </symbol>
@@ -164,6 +167,15 @@
       <div id="userName" class="account-name"></div>
       <div id="userEmail" class="account-email"></div>
     </div>
+    <!-- 同期の状態。オフラインで使うアプリなので、「今どこまで送れているか」が
+         いつでも見える場所に要る(画面上部のチップは全部片づくと消えるため)。 -->
+    <div id="syncStatus">
+      <span id="syncDot" class="sync-dot"></span>
+      <span id="syncText">確認しています…</span>
+    </div>
+    <button id="btnSyncNow" class="menu-item">
+      <svg class="ic" aria-hidden="true"><use href="#i-sync"></use></svg><span id="syncNowLabel">今すぐ同期する</span>
+    </button>
     <button id="btnExport" class="menu-item">
       <svg class="ic" aria-hidden="true"><use href="#i-download"></use></svg>データをダウンロード
     </button>
