@@ -250,20 +250,21 @@
   </form>
 </dialog>
 
-<!-- 写真から記録する(撮影地点から候補を出す) -->
-<dialog id="dlgPhotoImport">
-  <div>
-    <h2>写真から記録する</h2>
-    <div id="photoImportPreview"></div>
-    <p class="hint" id="photoImportWhere"></p>
-    <p class="hint error-text" id="photoImportWarn" hidden></p>
-    <div id="photoImportChoices"></div>
-    <div class="dlg-actions">
-      <button type="button" id="btnCancelPhotoImport" class="btn-secondary">キャンセル</button>
-      <button type="button" id="btnConfirmPhotoImport" class="btn-primary">ここに記録する</button>
-    </div>
+<!-- 写真から記録する。
+     モーダルではなく下から出るシートにしてある。写真の撮影地点は地図にピンとして
+     出すので、地図が見えていないと「ここですか?」の判断ができないため。 -->
+<aside id="photoSheet" class="panel" hidden>
+  <div class="sheet-grabber" aria-hidden="true"></div>
+  <h2>写真から記録する</h2>
+  <div id="photoImportPreview"></div>
+  <p class="hint" id="photoImportWhere"></p>
+  <p class="hint error-text" id="photoImportWarn" hidden></p>
+  <div id="photoImportChoices"></div>
+  <div class="sheet-actions">
+    <button type="button" id="btnCancelPhotoImport" class="btn-secondary">キャンセル</button>
+    <button type="button" id="btnConfirmPhotoImport" class="btn-primary">ここに記録する</button>
   </div>
-</dialog>
+</aside>
 
 <!-- データの書き出し -->
 <dialog id="dlgExport">

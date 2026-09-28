@@ -1,11 +1,17 @@
-/* field_visit_map — 写真から記録する(#dlgPhotoImport)。
+/* field_visit_map — 写真から記録する(#photoSheet)。
  *
  * 流れ:
- *   写真を選ぶ → EXIFの撮影地点を読む → 近くに登録済みの場所があれば
- *   「ここですか?」と候補を出す → 選んで記録する / 新しい場所として登録する。
+ *   写真を選ぶ → EXIFの撮影地点を読む → **その場所へ地図が動いてピンが立つ** →
+ *   近くに登録済みの場所があれば「ここですか?」と候補を出す →
+ *   選んで記録する / 新しい場所として登録する。
  *
- * 地図を先に作らなくても記録を始められるようにするための入口。現場では
- * 「撮ってから後で整理する」ことのほうが多く、撮影地点は写真自身が持っている。
+ * モーダルではなく下から出るシートにしてあるのは、撮影地点のピンと周りの
+ * 登録済みピンを見ながら選ぶ画面だから。モーダルで地図を覆うと、座標の数字だけで
+ * 「ここですか?」に答えることになり、判断できない。
+ *
+ * 地図そのものの操作(移動・ピンを置く・範囲を合わせる)は app.js の責任にしてある。
+ * このファイルは「どこが撮影地点か」「どれを選んだか」を handlers で伝えるだけ。
+ * そうしておくと、地図が読めない(圏外)ときでも候補選びはそのまま動く。
  *
  * 位置が読めない写真もある(GPSが切ってある、SNS経由で削除された、HEICなど)。
  * その場合は黙って諦めず、「地図で場所を選ぶ」か「登録済みの場所から選ぶ」に倒す。
@@ -26,6 +32,7 @@ const FAR_METERS = 5000;
 const NEW_PLACE = '__new__';
 
 let previewUrls = [];
+let session = null;      // シートが開いている間だけ中身が入る
 
 function clearPreviews() {
   previewUrls.forEach((u) => URL.revokeObjectURL(u));
@@ -99,64 +106,169 @@ function pickCandidates(pins, latLng) {
   return { rows: withDist.filter((c) => c.distance <= FAR_METERS).slice(0, 3), hasNear: false };
 }
 
+// ---------------------------------------------------------------- 外から使う
+
+/** シートが開いているか。開いている間は地図のタップの意味が変わる(app.js)。 */
+export function isPhotoImportOpen() {
+  return !!session;
+}
+
 /**
- * 写真から記録する画面を開く。
+ * 撮影地点を差し替える。地図をタップしたとき、撮影地点のピンをドラッグしたときに
+ * app.js から呼ばれる。GPSが少しずれている場合と、位置情報が無い写真で地図から
+ * 指す場合に使う。位置が変われば近さも変わるので、候補も出し直す。
+ */
+export function setPhotoLocation(latLng) {
+  if (!session) return;
+  session.latLng = latLng;
+  session.adjusted = true;
+  renderWhere();
+  $('photoImportWarn').hidden = true;
+  renderChoices();
+}
+
+/** 外(Escapeキーなど)から閉じる。 */
+export function closePhotoImport() {
+  if (session) $('btnCancelPhotoImport').click();
+}
+
+// ---------------------------------------------------------------- 描画
+
+function renderWhere() {
+  const { latLng, takenAt, adjusted } = session;
+  const parts = [];
+  if (latLng) {
+    parts.push(`${adjusted ? '指定した位置' : '撮影地点'}: ${latLng.lat.toFixed(6)}, ${latLng.lng.toFixed(6)}`);
+  }
+  if (takenAt) parts.push(`撮影日時: ${fmtDateTime(takenAt)}`);
+  $('photoImportWhere').textContent = parts.length
+    ? parts.join(' ・ ')
+    : '写真に位置情報がありませんでした。';
+}
+
+function renderChoices() {
+  const { pins, latLng } = session;
+  const choices = $('photoImportChoices');
+  // 出し直しても選択が飛ばないよう、選ばれていた値を覚えておく。
+  const checked = choices.querySelector('input:checked');
+  const previous = checked ? checked.value : null;
+  choices.innerHTML = '';
+
+  const { rows, hasNear } = pickCandidates(pins, latLng);
+  session.rows = rows;
+
+  const head = document.createElement('p');
+  head.className = 'hint';
+  if (!pins.length) head.textContent = 'まだ登録された場所がありません。';
+  else if (!latLng) head.textContent = '登録済みの場所から選ぶ:';
+  else if (hasNear) head.textContent = 'この近くの場所です。ここですか?';
+  else if (rows.length) head.textContent = `${NEAR_METERS} m以内に登録された場所はありません。いちばん近いのは:`;
+  else head.textContent = 'この近くに登録された場所はありません。新しい場所として登録できます。';
+  choices.appendChild(head);
+
+  const keep = previous
+    && (previous === NEW_PLACE || rows.some((c) => c.pin.id === previous));
+
+  rows.forEach((c, i) => {
+    const last = pinActivityTime(c.pin);
+    const sub = [
+      c.distance === null ? '' : fmtDistance(c.distance),
+      c.pin.category || '',
+      last ? `最終 ${fmtDate(last)}` : ''
+    ].filter(Boolean).join(' ・ ');
+    choices.appendChild(choiceRow({
+      value: c.pin.id,
+      name: c.pin.name || '(名前なし)',
+      sub,
+      checked: keep ? previous === c.pin.id : (hasNear && i === 0)
+    }));
+  });
+
+  choices.appendChild(choiceRow({
+    value: NEW_PLACE,
+    name: latLng ? 'ここを新しい場所として登録する' : '地図で場所を選ぶ',
+    sub: latLng
+      ? '写真の撮影地点に新しいピンを立てます'
+      : '地図を押して、写真を撮った場所を指定します',
+    checked: keep ? previous === NEW_PLACE : !hasNear
+  }));
+
+  updateButton();
+}
+
+function selectedValue() {
+  const el = $('photoImportChoices').querySelector('input[name="photoPinChoice"]:checked');
+  return el ? el.value : null;
+}
+
+function updateButton() {
+  const btn = $('btnConfirmPhotoImport');
+  const v = selectedValue();
+  btn.disabled = !v;
+  // 文言は短く。390px幅だと長いと2行に折り返して押しにくくなる。
+  if (v === NEW_PLACE) btn.textContent = session.latLng ? '新しい場所を作る' : '地図で選ぶ';
+  else btn.textContent = 'ここに記録する';
+}
+
+// ---------------------------------------------------------------- 開く
+
+/**
+ * 写真から記録するシートを開く。
  * @param {File[]} files
  * @param {Array} pins  現在のピン一覧
- * @returns {Promise<null | {action:'existing', pinId:string, files:File[], takenAt:number|null}
- *                        | {action:'new', latLng:{lat:number,lng:number}, files:File[], takenAt:number|null}
- *                        | {action:'pick-on-map', files:File[], takenAt:number|null}>}
+ * @param {{onLocated?: Function, onHighlight?: Function, onDone?: Function}} handlers
+ *   onLocated(latLng)        … 撮影地点が分かった時点。地図を動かしてピンを立てる
+ *   onHighlight(latLng, pin) … 候補を選び直した時点。両方が入る範囲に地図を合わせる
+ *   onDone()                 … 閉じた時点。仮ピンの片づけに使う
+ * @returns {Promise<null | {action:'existing', pinId, files, takenAt}
+ *                        | {action:'new', latLng, files, takenAt}
+ *                        | {action:'pick-on-map', files, takenAt}>}
  */
-export function openPhotoImport(files, pins) {
+export function openPhotoImport(files, pins, handlers = {}) {
   return new Promise((resolve) => {
-    const dlg = $('dlgPhotoImport');
-    const confirmBtn = $('btnConfirmPhotoImport');
+    const sheet = $('photoSheet');
     const choices = $('photoImportChoices');
+    const confirmBtn = $('btnConfirmPhotoImport');
+    const cancelBtn = $('btnCancelPhotoImport');
+
+    session = { files, pins, latLng: null, takenAt: null, adjusted: false, rows: [], handlers };
 
     renderPreview(files);
     $('photoImportWhere').textContent = '写真を調べています…';
     $('photoImportWarn').hidden = true;
     choices.innerHTML = '';
     confirmBtn.disabled = true;
-
-    let settled = false;
-    let latLng = null;
-    let takenAt = null;
-
-    function selected() {
-      const el = choices.querySelector('input[name="photoPinChoice"]:checked');
-      return el ? el.value : null;
-    }
-
-    function updateButton() {
-      const v = selected();
-      confirmBtn.disabled = !v;
-      // 文言は短く。390px幅だと長い名前は2行に折り返して押しにくくなる。
-      if (v === NEW_PLACE) {
-        confirmBtn.textContent = latLng ? '新しい場所を作る' : '地図で選ぶ';
-      } else {
-        confirmBtn.textContent = 'ここに記録する';
-      }
-    }
+    sheet.hidden = false;
 
     function cleanup() {
       confirmBtn.removeEventListener('click', onConfirm);
-      $('btnCancelPhotoImport').removeEventListener('click', onCancelClick);
-      choices.removeEventListener('change', updateButton);
-      dlg.removeEventListener('close', onClose);
+      cancelBtn.removeEventListener('click', onCancel);
+      choices.removeEventListener('change', onChange);
       clearPreviews();
+      sheet.hidden = true;
+      session = null;
+      if (handlers.onDone) handlers.onDone();
     }
 
     function finish(result) {
-      settled = true;
       cleanup();
-      dlg.close();
       resolve(result);
     }
 
+    function onChange() {
+      if (!session) return;
+      updateButton();
+      if (!handlers.onHighlight || !session.latLng) return;
+      const v = selectedValue();
+      const row = session.rows.find((c) => c.pin.id === v);
+      handlers.onHighlight(session.latLng, row ? row.pin : null);
+    }
+
     function onConfirm() {
-      const v = selected();
+      if (!session) return;
+      const v = selectedValue();
       if (!v) return;
+      const { latLng, takenAt } = session;
       if (v === NEW_PLACE) {
         finish(latLng
           ? { action: 'new', latLng, files, takenAt }
@@ -166,81 +278,34 @@ export function openPhotoImport(files, pins) {
       finish({ action: 'existing', pinId: v, files, takenAt });
     }
 
-    function onClose() {
-      // dialog.close() の close イベントは非同期に届く。前の回の close が
-      // 次の回が開いたあとに飛んでくると、開いたばかりの画面が「取り消された」と
-      // 誤判定される(実際にこれで写真の選択が無かったことにされた)。
-      // その瞬間は既に開き直しているので、開いていれば自分宛てではない。
-      if (settled || dlg.open) return;
-      cleanup();
-      resolve(null);
-    }
-    function onCancelClick() { dlg.close(); }
+    function onCancel() { finish(null); }
 
     confirmBtn.addEventListener('click', onConfirm);
-    $('btnCancelPhotoImport').addEventListener('click', onCancelClick);
-    choices.addEventListener('change', updateButton);
-    dlg.addEventListener('close', onClose);
-    dlg.showModal();
+    cancelBtn.addEventListener('click', onCancel);
+    choices.addEventListener('change', onChange);
 
-    // EXIFの読み取りは写真の枚数ぶんかかるので、画面を出してから進める。
+    // EXIFの読み取りは枚数ぶんかかるので、シートを出してから進める。
     (async () => {
       const meta = await readGroupMeta(files);
-      if (settled) return;
-      latLng = (meta.lat !== null && meta.lng !== null) ? { lat: meta.lat, lng: meta.lng } : null;
-      takenAt = meta.takenAt;
+      if (!session) return;                       // 読んでいる間に閉じられた
+      session.latLng = (meta.lat !== null && meta.lng !== null)
+        ? { lat: meta.lat, lng: meta.lng }
+        : null;
+      session.takenAt = meta.takenAt;
 
-      const where = [];
-      if (latLng) where.push(`撮影地点: ${latLng.lat.toFixed(6)}, ${latLng.lng.toFixed(6)}`);
-      if (takenAt) where.push(`撮影日時: ${fmtDateTime(takenAt)}`);
-      $('photoImportWhere').textContent = where.length
-        ? where.join(' ・ ')
-        : '写真に位置情報がありませんでした。';
-
-      if (!latLng) {
+      renderWhere();
+      if (!session.latLng) {
         $('photoImportWarn').hidden = false;
         $('photoImportWarn').textContent =
           '位置情報が読み取れませんでした(カメラの位置情報が切ってあるか、'
           + '送信の途中で削除された可能性があります)。場所を選んでください。';
+      } else if (handlers.onLocated) {
+        // ここで地図が撮影地点へ動き、ピンが立つ。
+        handlers.onLocated(session.latLng);
       }
 
-      const { rows, hasNear } = pickCandidates(pins, latLng);
-
-      const head = document.createElement('p');
-      head.className = 'hint';
-      if (!pins.length) head.textContent = 'まだ登録された場所がありません。';
-      else if (!latLng) head.textContent = '登録済みの場所から選ぶ:';
-      else if (hasNear) head.textContent = 'この近くの場所です。ここですか?';
-      else if (rows.length) head.textContent = `${NEAR_METERS} m以内に登録された場所はありません。いちばん近いのは:`;
-      else head.textContent = 'この近くに登録された場所はありません。新しい場所として登録できます。';
-      choices.appendChild(head);
-
-      rows.forEach((c, i) => {
-        const last = pinActivityTime(c.pin);
-        const sub = [
-          c.distance === null ? '' : fmtDistance(c.distance),
-          c.pin.category || '',
-          last ? `最終 ${fmtDate(last)}` : ''
-        ].filter(Boolean).join(' ・ ');
-        choices.appendChild(choiceRow({
-          value: c.pin.id,
-          name: c.pin.name || '(名前なし)',
-          sub,
-          // 近くに候補があるときだけ、いちばん近いものを最初から選んでおく。
-          checked: hasNear && i === 0
-        }));
-      });
-
-      choices.appendChild(choiceRow({
-        value: NEW_PLACE,
-        name: latLng ? 'ここを新しい場所として登録する' : '地図で場所を選ぶ',
-        sub: latLng
-          ? '写真の撮影地点に新しいピンを立てます'
-          : '地図を押して、写真を撮った場所を指定します',
-        checked: !hasNear
-      }));
-
-      updateButton();
+      renderChoices();
+      onChange();
     })();
   });
 }

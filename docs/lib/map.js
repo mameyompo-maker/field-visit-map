@@ -64,14 +64,18 @@ function getPosition(options) {
 }
 
 /**
- * 地図を1つ作る。onPinClick(id) はマーカータップ時に呼ばれる。
- * 地図の空白部分をタップしてもピン追加フォームは開かない
- * (移動のたびにダイアログが出る誤操作が多すぎるため。追加は＋ボタンから行う)。
+ * 地図を1つ作る。
+ *   onPinClick(id)     … 登録済みのピンをタップしたとき
+ *   onMapClick(latLng) … 地図の空白をタップ/長押ししたとき(「この場所」シートを出す)
+ *   onIdle()           … 表示位置が落ち着いたとき
+ * 空白のタップで即フォームを開かないのは、地図を動かすたびにダイアログが出る
+ * 誤操作を避けるため。まず仮ピンとシートを出し、確定は利用者に押させる。
  */
 export async function createMapController(container, { onPinClick, onMapClick, onIdle } = {}) {
   const maps = await loadMapsApi();
   const { Map: GoogleMap } = await maps.importLibrary('maps');
   const { AdvancedMarkerElement, PinElement } = await maps.importLibrary('marker');
+  const { LatLngBounds } = await maps.importLibrary('core');
 
   // 現在地が取れるまでの「とりあえずの表示」。真っ白な地図を見せないためのもので、
   // 起動時は下の locate() で現在地へ寄せ直す。
@@ -144,6 +148,18 @@ export async function createMapController(container, { onPinClick, onMapClick, o
 
   function clearTempPin() {
     if (tempMarker) tempMarker.map = null;
+  }
+
+  /* 撮影地点と候補の場所を両方いっぺんに見せる。片方に寄せると
+   * 「近いのか遠いのか」が分からず、「ここですか?」に答えられない。 */
+  function fitPoints(points, bottomPx = 0) {
+    const list = (points || []).filter((p) => p && Number.isFinite(p.lat) && Number.isFinite(p.lng));
+    if (!list.length) return;
+    if (list.length === 1) { centerOn(list[0], 17); keepVisible(list[0], bottomPx); return; }
+    const bounds = new LatLngBounds();
+    list.forEach((p) => bounds.extend(p));
+    // 下のシートで隠れるぶんを余白として渡す(Maps APIが余白を避けて収めてくれる)。
+    map.fitBounds(bounds, { top: 80, left: 48, right: 48, bottom: bottomPx + 24 });
   }
 
   /* 画面下のほうを押すと、置いた仮ピンが「この場所」シートの裏に隠れてしまう。
@@ -256,6 +272,6 @@ export async function createMapController(container, { onPinClick, onMapClick, o
 
   return {
     map, render, centerOn, getCenter, locate, showMyLocation, whenTilesFail,
-    setTempPin, clearTempPin, keepVisible
+    setTempPin, clearTempPin, keepVisible, fitPoints
   };
 }

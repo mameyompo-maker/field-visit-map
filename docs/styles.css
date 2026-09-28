@@ -390,7 +390,12 @@ label.fab { display: grid; place-items: center; cursor: pointer; }
   background: var(--line); display: block;
 }
 
-#photoImportChoices { margin: 14px 0 4px; max-height: 46vh; overflow-y: auto; }
+#photoSheet h2 { font-size: 1.1rem; margin: 0 0 10px; font-weight: 500; }
+#photoSheet { max-height: 66vh; }   /* 上半分に地図とピンを残す */
+.sheet-actions { display: flex; gap: 10px; margin-top: 14px; }
+.sheet-actions button { flex: 1 1 0; }
+
+#photoImportChoices { margin: 14px 0 4px; }
 #photoImportChoices > .hint { margin: 0 0 8px; }
 
 .choice-row {

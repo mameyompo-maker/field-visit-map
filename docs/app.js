@@ -13,7 +13,9 @@ import { startAutoSync } from './lib/offline-queue.js';
 import { openPinPanel, refreshPinData, closePinPanel, setPinPanelHandlers } from './ui/pin-panel.js';
 import { openPinForm } from './ui/pin-form.js';
 import { openVisitForm } from './ui/visit-form.js';
-import { openPhotoImport } from './ui/photo-import.js';
+import {
+  openPhotoImport, isPhotoImportOpen, setPhotoLocation, closePhotoImport
+} from './ui/photo-import.js';
 import { mountPinList, setPins, openPinList, closePinList } from './ui/pin-list.js';
 import { openExportDialog } from './ui/export-dialog.js';
 import { toast, errorToast } from './ui/toast.js';
@@ -47,6 +49,8 @@ async function startMap() {
       onPinClick: (pinId) => {
         const pin = latestPins.find((p) => p.id === pinId);
         if (!pin) return;
+        // 写真シートを開いている間は、候補の選択と食い違わないよう詳細を開かない。
+        if (isPhotoImportOpen()) { setPhotoLocation({ lat: pin.lat, lng: pin.lng }); return; }
         // 写真の置き場所を探している最中に既存のピンを押したら、そこに記録する
         // (写真を黙って捨てない。利用者の操作としては「ここだ」と指したのと同じ)。
         const carried = pendingPhotos;
@@ -56,7 +60,15 @@ async function startMap() {
         openPinPanel(pin);
         if (carried) openVisitForm(pin.id, carried);
       },
-      onMapClick: (latLng) => showPlaceSheet(latLng)
+      onMapClick: (latLng) => {
+        // 写真の場所を探している最中は、地図を押す = その場所に写真の位置を移す。
+        if (isPhotoImportOpen()) {
+          setPhotoLocation(latLng);
+          mapController.setTempPin(latLng, (moved) => setPhotoLocation(moved));
+          return;
+        }
+        showPlaceSheet(latLng);
+      }
     });
     mapController.render(latestPins);
     mapController.whenTilesFail(12000, () => {
@@ -144,9 +156,34 @@ async function beginAddPin() {
 
 // ------------------------------------------------------------------ 写真から記録する
 
+/* 写真を選んだら、EXIFの撮影地点を読んだ時点で地図をそこへ動かし、青いピンを立てる。
+ * 座標の数字だけ見せて「ここですか?」と聞いても答えようがないため、
+ * まず地図の上に出す。ピンはドラッグで動かせ、地図を押しても動かせる
+ * (GPSは数十m単位でずれることがあり、直せないと使い物にならない)。 */
 async function startPhotoImport(files) {
   if (!files.length) return;
-  const result = await openPhotoImport(files, latestPins);
+  hidePlaceSheet();
+  closePinPanel();
+  closePinList();
+
+  const result = await openPhotoImport(files, latestPins, {
+    onLocated: (latLng) => {
+      if (!mapController) return;
+      mapController.centerOn(latLng, 17);
+      mapController.setTempPin(latLng, (moved) => setPhotoLocation(moved));
+      mapController.keepVisible(latLng, $('photoSheet').offsetHeight);
+    },
+    onHighlight: (latLng, pin) => {
+      if (!mapController) return;
+      const bottom = $('photoSheet').offsetHeight;
+      // 候補を選んだら、撮影地点とその場所の両方が入るように地図を合わせる。
+      mapController.fitPoints(
+        pin ? [latLng, { lat: pin.lat, lng: pin.lng }] : [latLng],
+        bottom
+      );
+    },
+    onDone: () => { if (mapController) mapController.clearTempPin(); }
+  });
   if (!result) return;
 
   if (result.action === 'existing') {
@@ -233,6 +270,7 @@ function wireMapScreen() {
 
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
+    if (isPhotoImportOpen()) { closePhotoImport(); return; }
     if (!$('placeSheet').hidden) { cancelPlaceSheet(); return; }
     closeAccountMenu();
     closePinList();
