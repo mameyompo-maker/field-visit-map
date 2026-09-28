@@ -12,6 +12,8 @@ Googleマップの「保存した場所」では足りない、写真・メモ�
   (Security Rulesが唯一の防御線)
 - オフライン対応: 電波が無い現場でもピン・メモ・写真の記録ができ、電波復帰時に自動同期する
   (詳細設計は `HANDOVER.md` 参照)
+- 写真から記録: 写真を選ぶとEXIFの撮影地点を読み、近くの登録済みの場所を候補に出す
+  (「ここですか?」)。近くに無ければ撮影地点に新しい場所を作る。撮影日時も記録に使う
 - 書き出し: 記録を端末にダウンロードして他の道具へ持ち出せる。地図はKML(Google
   マイマップにそのまま読み込める)、記録はCSV/Markdown/JSON、写真は実体ごとZIP
 - 実装方式: ビルド不要の素のHTML/JS(ESモジュール)。`git push` すればGitHub Pagesに即反映
@@ -33,6 +35,8 @@ docs/                … GitHub Pages配信元
   lib/               … Firebase/地図/オフラインキュー/書き出し等の共通ロジック
     export.js        … KML・CSV・Markdown・JSON・GeoJSONの生成とダウンロード
     zip.js           … 無圧縮ZIPの書き出し(外部ライブラリを使わない理由は同ファイル冒頭)
+    exif.js          … 写真から撮影地点・撮影日時を読む(自前のEXIF解析)
+    geo.js           … 2地点の距離(候補の絞り込みに使う)
   ui/                 … 画面部品(フォーム・パネル・ライトボックス・書き出し画面)
 firestore.rules, storage.rules, firebase.json, firestore.indexes.json
 ```
