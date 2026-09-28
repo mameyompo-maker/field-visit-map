@@ -250,8 +250,11 @@ function renderVisits(visits) {
     const gapText = gap === null
       ? '<span class="gap-tag first">最初の記録</span>'
       : `<span class="gap-tag">前回から${gap}日</span>`;
+    // 写真から登録した記録は、表示している日時が「撮影日時」であることを断る。
+    // 何も書かないと、アップロードした日と取り違えられる。
+    const fromPhoto = visit.takenAtLocal ? '<span class="when-tag">撮影日時</span>' : '';
     card.innerHTML = `
-      <div class="when">${esc(fmtDateTime(t))}${badge}</div>
+      <div class="when">${esc(fmtDateTime(t))}${fromPhoto}${badge}</div>
       <div class="who">${esc(visit.visitedBy?.displayName || '')} ・ ${esc(ago(t))} ${gapText}</div>
       <div class="note">${esc(visit.note || '')}</div>
       <div class="photo-thumbs" id="photos-${visit.id}"></div>

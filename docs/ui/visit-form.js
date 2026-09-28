@@ -47,8 +47,13 @@ function renderPreview() {
   $('visitPhotoCount').textContent = picked.length ? `${picked.length}枚` : '';
 }
 
-/** 訪問記録フォームを開く。閉じたら Promise<boolean> を返す(保存したら true)。 */
-export function openVisitForm(pinId) {
+/**
+ * 訪問記録フォームを開く。閉じたら Promise<boolean> を返す(保存したら true)。
+ * @param {string} pinId
+ * @param {{files?: File[], takenAt?: number|null}} [initial]
+ *   写真から記録する経路で、選んだ写真と撮影日時を引き継ぐために使う。
+ */
+export function openVisitForm(pinId, { files: initialFiles = [], takenAt = null } = {}) {
   return new Promise((resolve) => {
     const dlg = $('dlgVisitForm');
     const form = $('formVisit');
@@ -57,12 +62,21 @@ export function openVisitForm(pinId) {
     const submitBtn = $('btnSaveVisitForm');
 
     $('inpVisitNote').value = '';
-    picked = [];
+    picked = initialFiles.slice();
     camInput.value = '';
     libInput.value = '';
     renderPreview();
     const who = currentUser();
     $('visitFormWho').textContent = who ? `記録者: ${who.displayName}(自動)` : '';
+    // 撮影日時があるときは、この記録がいつの出来事として残るのかを明示する
+    // (アップロードした今日ではなく、写真を撮った日で並ぶため)。
+    const takenEl = $('visitFormTaken');
+    takenEl.hidden = !takenAt;
+    if (takenAt) {
+      takenEl.textContent = '写真の撮影日時: ' + new Date(takenAt).toLocaleString('ja-JP', {
+        year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+      }) + '(この日時で記録します)';
+    }
 
     let settled = false;
 
@@ -93,7 +107,7 @@ export function openVisitForm(pinId) {
       const files = picked.slice();
       let visitId;
       try {
-        visitId = createVisit(pinId, { note });
+        visitId = createVisit(pinId, { note, takenAtLocal: takenAt });
       } catch (err) {
         errorToast('記録できませんでした', err);
         return;
@@ -117,7 +131,11 @@ export function openVisitForm(pinId) {
     }
 
     function onCancel() {
-      if (settled) return;
+      // dialog.close() の close イベントは非同期に届く。前の回の close が
+      // 次の回が開いたあとに飛んでくると、開いたばかりの画面が「取り消された」と
+      // 誤判定される(実際にこれで写真の選択が無かったことにされた)。
+      // その瞬間は既に開き直しているので、開いていれば自分宛てではない。
+      if (settled || dlg.open) return;
       cleanup();
       resolve(false);
     }

@@ -39,7 +39,11 @@ export function openPinForm({ lat, lng, pin } = {}) {
       });
     }
     function onCancel() {
-      if (settled) return;
+      // dialog.close() の close イベントは非同期に届く。前の回の close が
+      // 次の回が開いたあとに飛んでくると、開いたばかりの画面が「取り消された」と
+      // 誤判定される(実際にこれで写真の選択が無かったことにされた)。
+      // その瞬間は既に開き直しているので、開いていれば自分宛てではない。
+      if (settled || dlg.open) return;
       cleanup();
       resolve(null);
     }

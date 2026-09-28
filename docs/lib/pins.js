@@ -110,7 +110,11 @@ export function pinActivityTime(pin) {
 
 // -------------------------------------------------------------- 訪問記録
 
+/* 記録の「いつ」。写真から登録した場合は撮影日時を優先する。
+ * アップロードした時刻で並べると、あとからまとめて上げた古い写真が最新扱いに
+ * なり、「前回からの変化」が読めなくなる。実際に現場にいたのは撮影した時刻。 */
 export function visitTime(visit) {
+  if (visit.takenAtLocal) return visit.takenAtLocal;
   if (visit.visitedAt && visit.visitedAt.toMillis) return visit.visitedAt.toMillis();
   return visit.visitedAtLocal || 0;
 }
@@ -131,7 +135,7 @@ export function listenVisits(pinId, onChange) {
 }
 
 /** 訪問を記録する。こちらもIDを即返すので、写真の添付は呼び出し側で後追いできる。 */
-export function createVisit(pinId, { note }) {
+export function createVisit(pinId, { note, takenAtLocal = null }) {
   const who = whoAmI();
   const now = Date.now();
   const visitRef = doc(collection(db, 'pins', pinId, 'visits'));
@@ -139,6 +143,8 @@ export function createVisit(pinId, { note }) {
     visitedBy: who,
     visitedAt: serverTimestamp(),
     visitedAtLocal: now,
+    // 写真のEXIFから読んだ撮影日時。無ければ null(手で書いた記録)。
+    takenAtLocal: takenAtLocal || null,
     note: note || '',
     photoCount: 0,
     createdAt: serverTimestamp()

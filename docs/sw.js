@@ -14,7 +14,7 @@
  *  版数さえ上げれば利用者の操作は要らない。)
  */
 
-const CACHE = 'field-visit-map-v7';
+const CACHE = 'field-visit-map-v8';
 
 const FILES = [
   './',
@@ -31,6 +31,8 @@ const FILES = [
   './lib/offline-queue.js',
   './lib/sync-status.js',
   './lib/zip.js',
+  './lib/exif.js',
+  './lib/geo.js',
   './lib/export.js',
   './ui/pin-panel.js',
   './ui/pin-form.js',
@@ -38,6 +40,7 @@ const FILES = [
   './ui/visit-form.js',
   './ui/lightbox.js',
   './ui/export-dialog.js',
+  './ui/photo-import.js',
   './ui/toast.js'
 ];
 

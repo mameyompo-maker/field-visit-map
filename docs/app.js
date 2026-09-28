@@ -12,6 +12,8 @@ import { mountStatusBar } from './lib/sync-status.js';
 import { startAutoSync } from './lib/offline-queue.js';
 import { openPinPanel, refreshPinData, closePinPanel, setPinPanelHandlers } from './ui/pin-panel.js';
 import { openPinForm } from './ui/pin-form.js';
+import { openVisitForm } from './ui/visit-form.js';
+import { openPhotoImport } from './ui/photo-import.js';
 import { mountPinList, setPins, openPinList, closePinList } from './ui/pin-list.js';
 import { openExportDialog } from './ui/export-dialog.js';
 import { toast, errorToast } from './ui/toast.js';
@@ -27,6 +29,9 @@ let latestPins = [];
 let started = false;
 let pendingOpenPinId = null;
 let tempLatLng = null;   // 地図を押して置いた仮ピンの位置
+/* 写真から記録する流れで、ピンができるまで持ち越す写真。
+ * ピンが一覧に現れるのは onSnapshot が返ってからなので、その場では記録できない。 */
+let pendingPhotos = null;
 
 // ------------------------------------------------------------------ 地図
 
@@ -41,7 +46,15 @@ async function startMap() {
     mapController = await createMapController($('map'), {
       onPinClick: (pinId) => {
         const pin = latestPins.find((p) => p.id === pinId);
-        if (pin) { hidePlaceSheet(); closePinList(); openPinPanel(pin); }
+        if (!pin) return;
+        // 写真の置き場所を探している最中に既存のピンを押したら、そこに記録する
+        // (写真を黙って捨てない。利用者の操作としては「ここだ」と指したのと同じ)。
+        const carried = pendingPhotos;
+        pendingPhotos = null;
+        hidePlaceSheet();
+        closePinList();
+        openPinPanel(pin);
+        if (carried) openVisitForm(pin.id, carried);
       },
       onMapClick: (latLng) => showPlaceSheet(latLng)
     });
@@ -86,6 +99,14 @@ function hidePlaceSheet() {
   tempLatLng = null;
 }
 
+/* 「やめる」で抜けるときだけ、持ち越していた写真も捨てる。
+ * hidePlaceSheet() 自体で捨ててはいけない — 「ここに場所を追加」でも呼ばれるため、
+ * 一緒にすると写真から作った場所に写真が付かなくなる。 */
+function cancelPlaceSheet() {
+  hidePlaceSheet();
+  pendingPhotos = null;
+}
+
 function currentPosition() {
   return new Promise((resolve) => {
     if (!navigator.geolocation) { resolve(null); return; }
@@ -99,7 +120,7 @@ function currentPosition() {
 
 async function addPinAt(latLng) {
   const result = await openPinForm(latLng);
-  if (!result) return;
+  if (!result) { pendingPhotos = null; return; }
   try {
     // 追加したらそのまま訪問を記録する流れが多いので、詳細シートを開いてやる。
     // ただしピンが一覧に現れるのは onSnapshot が返ってから(同じ処理の中ではない)
@@ -121,6 +142,38 @@ async function beginAddPin() {
   addPinAt(pos);
 }
 
+// ------------------------------------------------------------------ 写真から記録する
+
+async function startPhotoImport(files) {
+  if (!files.length) return;
+  const result = await openPhotoImport(files, latestPins);
+  if (!result) return;
+
+  if (result.action === 'existing') {
+    const pin = latestPins.find((p) => p.id === result.pinId);
+    if (pin) focusPin(pin, { openPanel: true });
+    openVisitForm(result.pinId, { files: result.files, takenAt: result.takenAt });
+    return;
+  }
+
+  if (result.action === 'new') {
+    pendingPhotos = { files: result.files, takenAt: result.takenAt };
+    if (mapController) mapController.centerOn(result.latLng, 17);
+    addPinAt(result.latLng);
+    return;
+  }
+
+  // 位置が読めなかったので、地図で指してもらう。
+  pendingPhotos = { files: result.files, takenAt: result.takenAt };
+  if (!mapController) {
+    toast('地図を表示できないため、場所を指定できません。通信できる場所でお試しください', 6000);
+    pendingPhotos = null;
+    return;
+  }
+  toast('写真を撮った場所を地図で押してください', 5000);
+  showPlaceSheet(mapController.getCenter());
+}
+
 // ------------------------------------------------------------------ アカウントメニュー
 
 function closeAccountMenu() { $('accountMenu').hidden = true; }
@@ -129,7 +182,7 @@ function closeAccountMenu() { $('accountMenu').hidden = true; }
 
 function wireMapScreen() {
   $('btnAddPin').addEventListener('click', beginAddPin);
-  $('btnCancelPlace').addEventListener('click', hidePlaceSheet);
+  $('btnCancelPlace').addEventListener('click', cancelPlaceSheet);
   $('btnAddHere').addEventListener('click', () => {
     const latLng = tempLatLng;
     hidePlaceSheet();
@@ -147,6 +200,13 @@ function wireMapScreen() {
     const menu = $('accountMenu');
     menu.hidden = !menu.hidden;
     if (!menu.hidden) closePinList();
+  });
+
+  $('inpPhotoImport').addEventListener('change', (e) => {
+    const files = Array.from(e.target.files || []);
+    // 同じ写真をもう一度選べるように毎回空にする(空にしないと change が飛ばない端末がある)。
+    e.target.value = '';
+    startPhotoImport(files);
   });
 
   $('btnExport').addEventListener('click', () => {
@@ -173,7 +233,7 @@ function wireMapScreen() {
 
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if (!$('placeSheet').hidden) { hidePlaceSheet(); return; }
+    if (!$('placeSheet').hidden) { cancelPlaceSheet(); return; }
     closeAccountMenu();
     closePinList();
     closePinPanel();
@@ -209,7 +269,18 @@ function startApp() {
 
     if (pendingOpenPinId) {
       const fresh = pins.find((p) => p.id === pendingOpenPinId);
-      if (fresh) { pendingOpenPinId = null; openPinPanel(fresh); }
+      if (fresh) {
+        pendingOpenPinId = null;
+        if (pendingPhotos) {
+          // 写真から作った場所は、そのまま記録まで進めてやる。
+          const carried = pendingPhotos;
+          pendingPhotos = null;
+          openPinPanel(fresh);
+          openVisitForm(fresh.id, carried);
+        } else {
+          openPinPanel(fresh);
+        }
+      }
     }
   });
 

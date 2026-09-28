@@ -176,6 +176,14 @@
   <button id="syncBar" hidden></button>
 
   <div id="mapControls">
+    <!-- 写真から記録する入口。撮影地点は写真自身が持っているので、
+         地図を先に作らなくても記録を始められる。 -->
+    <label id="btnPhotoAdd" class="fab" title="写真から記録する">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <use href="#i-camera" fill="#5f6368"></use>
+      </svg>
+      <input id="inpPhotoImport" type="file" accept="image/*" multiple hidden>
+    </label>
     <button id="btnLocate" class="fab" title="現在地">
       <svg viewBox="0 0 24 24" width="24" height="24"><path fill="#1a73e8" d="M12 8a4 4 0 1 0 4 4 4 4 0 0 0-4-4m8.94 3A9 9 0 0 0 13 3.06V1h-2v2.06A9 9 0 0 0 3.06 11H1v2h2.06A9 9 0 0 0 11 20.94V23h2v-2.06A9 9 0 0 0 20.94 13H23v-2zM12 19a7 7 0 1 1 7-7 7 7 0 0 1-7 7"/></svg>
     </button>
@@ -223,6 +231,7 @@
   <form id="formVisit" method="dialog">
     <h2>記録を追加</h2>
     <p class="hint" id="visitFormWho"></p>
+    <p class="hint" id="visitFormTaken" hidden></p>
     <label>備考<textarea id="inpVisitNote" rows="4" maxlength="2000" placeholder="前回からの変化、作業内容、気づいたことなど"></textarea></label>
     <div class="photo-pick">
       <label class="file-btn"><svg class="ic" aria-hidden="true"><use href="#i-camera"></use></svg>カメラで撮る
@@ -239,6 +248,21 @@
       <button type="submit" id="btnSaveVisitForm" class="btn-primary">追加する</button>
     </div>
   </form>
+</dialog>
+
+<!-- 写真から記録する(撮影地点から候補を出す) -->
+<dialog id="dlgPhotoImport">
+  <div>
+    <h2>写真から記録する</h2>
+    <div id="photoImportPreview"></div>
+    <p class="hint" id="photoImportWhere"></p>
+    <p class="hint error-text" id="photoImportWarn" hidden></p>
+    <div id="photoImportChoices"></div>
+    <div class="dlg-actions">
+      <button type="button" id="btnCancelPhotoImport" class="btn-secondary">キャンセル</button>
+      <button type="button" id="btnConfirmPhotoImport" class="btn-primary">ここに記録する</button>
+    </div>
+  </div>
 </dialog>
 
 <!-- データの書き出し -->
