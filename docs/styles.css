@@ -379,6 +379,16 @@ dialog input[type="text"]:focus, dialog textarea:focus { outline: 2px solid var(
 .export-title { display: block; font-weight: 500; }
 .export-sub { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 3px; line-height: 1.5; }
 
+/* 「すべてダウンロード」は既定の選び方として、枠を青くして他より目立たせる。
+ * 個別の3つは「あえて一部だけ欲しい」ときの選択肢という位置づけにする。 */
+.export-row-all { border: 1px solid var(--blue); background: #eef4fe; }
+.export-row-all:hover { background: #e3edfd; }
+.export-row-all .ic { color: var(--blue); }
+.export-divider {
+  margin: 18px 0 0; padding-top: 14px; border-top: 1px solid var(--line);
+  font-size: 0.78rem;
+}
+
 .progress-track {
   height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 14px;
 }

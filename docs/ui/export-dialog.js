@@ -19,7 +19,7 @@ let busy = false;
 
 function setBusy(on) {
   busy = on;
-  ['btnExportKml', 'btnExportText', 'btnExportFull'].forEach((id) => { $(id).disabled = on; });
+  ['btnExportAll', 'btnExportKml', 'btnExportText', 'btnExportFull'].forEach((id) => { $(id).disabled = on; });
 }
 
 function showProgress(on) {
@@ -80,6 +80,21 @@ export async function openExportDialog() {
 }
 
 $('btnCloseExport')?.addEventListener('click', () => $('dlgExport').close());
+
+/* 「写真つき一式」の中には地図.kmlも既に入っているので、内容として欠けはない。
+ * それでも地図(KML)を単独でも出すのは、マイマップに直接読み込めるのはKML単体
+ * ファイルだけだから(ZIPのままでは読み込めない)。だから「すべて」は
+ * 「KML単体 + 写真つき一式ZIP」の2ファイルを指す。 */
+$('btnExportAll')?.addEventListener('click', () => run(async (d) => {
+  downloadKml(d);
+  showProgress(true);
+  const { failed } = await downloadFullPack(d, onProgress);
+  if (failed) {
+    toast(`保存しました。ただし写真 ${failed} 枚は取り出せませんでした(ZIP内の説明を参照)`, 7000);
+  } else {
+    toast('地図(KML)と写真つき一式(ZIP)を保存しました');
+  }
+}));
 
 $('btnExportKml')?.addEventListener('click', () => run((d) => {
   downloadKml(d);
